@@ -1,0 +1,240 @@
+#!/usr/bin/env bash
+# HyprTomic USR layer: symlink a user-owned git repository into $HOME.
+#
+# The repository holds a `home/` directory that mirrors $HOME. Every file in it
+# is symlinked, so edits in the repository are live immediately and `git diff`
+# shows exactly what changed. Files the image also ships (via /etc/skel) are
+# never touched by sync-skel-config once they are linked here.
+#
+# Environment:
+#   HYPRTOMIC_USER_DIR  repository path (default: ~/.config/hyprtomic-user)
+set -euo pipefail
+
+repo="${HYPRTOMIC_USER_DIR:-$HOME/.config/hyprtomic-user}"
+state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/hyprtomic"
+manifest_file="$state_dir/user-manifest"
+
+die() { echo "user-config: $*" >&2; exit 1; }
+
+usage() {
+    cat <<'EOF'
+usage: user-config <init|status|apply|update> [--dry-run] [--prune]
+
+  init    create the repository skeleton (git init included)
+  status  show differences between the repository and $HOME
+  apply   symlink <repo>/home into $HOME
+  update  git pull --ff-only, then apply
+
+options:
+  --dry-run  print what apply would do
+  --prune    remove links that the repository no longer contains
+
+environment:
+  HYPRTOMIC_USER_DIR  repository path (default: ~/.config/hyprtomic-user)
+EOF
+}
+
+repo_files() {
+    (cd "$repo/home" && find . -mindepth 1 ! -type d -printf '%P\n' | LC_ALL=C sort)
+}
+
+cmd_init() {
+    if [ -d "$repo/home" ] && [ -n "$(repo_files)" ]; then
+        die "$repo already has a home/ tree; refusing to overwrite"
+    fi
+
+    mkdir -p "$repo/home/.config/hypr" "$repo/home/.local/bin"
+
+    if [ ! -f "$repo/README.md" ]; then
+        cat >"$repo/README.md" <<'EOF'
+# hyprtomic-user
+
+Personal configuration for HyprTomic. Everything under `home/` is symlinked
+into `$HOME` by `ujust user-config-apply`.
+
+- `home/` mirrors `$HOME`. Add files there, not in the repository root.
+- `home/.config/hypr/user.lua` is loaded last by the image's `hyprland.lua`.
+- Machine-specific rpm-ostree state lives in a separate repository:
+  `~/.config/hyprtomic-machine/machine.json` (`ujust machine-apply`).
+- Never commit secrets.
+
+## Apply
+
+```sh
+ujust user-config-apply          # link everything
+ujust user-config-status         # check for drift
+ujust prune=1 user-config-apply  # drop links the repository removed
+```
+EOF
+    fi
+
+    if [ ! -f "$repo/.gitignore" ]; then
+        cat >"$repo/.gitignore" <<'EOF'
+*.bak
+*.swp
+EOF
+    fi
+
+    if [ ! -f "$repo/home/.config/hypr/user.lua" ]; then
+        cat >"$repo/home/.config/hypr/user.lua" <<'EOF'
+-- HyprTomic user overrides.
+-- Loaded last by ~/.config/hypr/hyprland.lua, after theme/workspaces/DMS.
+-- Return a table to override the image defaults, or call hl.* directly.
+return {
+    -- monitor_primary = "DP-1",
+}
+EOF
+    fi
+
+    if [ ! -d "$repo/.git" ]; then
+        git -C "$repo" init -q
+    fi
+
+    echo "initialized $repo"
+    echo "next: edit home/, commit, then 'ujust user-config-apply'"
+}
+
+cmd_status() {
+    [ -d "$repo/home" ] || die "no $repo/home (run 'ujust user-config-init')"
+
+    local rel target link rc=0 dest
+    while IFS= read -r rel; do
+        target="$HOME/$rel"
+        link="$repo/home/$rel"
+        if [ -L "$target" ]; then
+            if [ "$(readlink "$target")" != "$link" ]; then
+                echo "wrong-target  $target -> $(readlink "$target")"
+                rc=1
+            fi
+        elif [ -e "$target" ]; then
+            echo "conflict      $target (regular file or directory)"
+            rc=1
+        else
+            echo "missing       $target"
+            rc=1
+        fi
+    done < <(repo_files)
+
+    if [ -f "$manifest_file" ]; then
+        local current
+        current="$(mktemp)"
+        repo_files >"$current"
+        while IFS= read -r rel; do
+            [ -n "$rel" ] || continue
+            target="$HOME/$rel"
+            if [ -L "$target" ]; then
+                dest="$(readlink "$target")"
+                case "$dest" in
+                    "$repo/home/"*)
+                        echo "stale         $target (no longer in repository)"
+                        rc=1
+                        ;;
+                esac
+            fi
+        done < <(comm -23 "$manifest_file" "$current")
+        rm -f "$current"
+    fi
+
+    if [ "$rc" = 0 ]; then
+        echo "user configuration is in sync"
+    else
+        echo "drift detected: run 'ujust user-config-apply'"
+    fi
+}
+
+cmd_apply() {
+    local dry_run="$1" prune="$2"
+    [ -d "$repo/home" ] || die "no $repo/home (run 'ujust user-config-init')"
+
+    local new_manifest
+    new_manifest="$(mktemp)"
+    trap 'rm -f "$new_manifest"' EXIT
+    repo_files >"$new_manifest"
+
+    local backup
+    backup="$state_dir/backup/$(date +%Y%m%d-%H%M%S)"
+    local changed=0 rel target link dest
+
+    if [ "$prune" = 1 ] && [ -f "$manifest_file" ]; then
+        while IFS= read -r rel; do
+            [ -n "$rel" ] || continue
+            target="$HOME/$rel"
+            [ -L "$target" ] || continue
+            dest="$(readlink "$target")"
+            case "$dest" in
+                "$repo/home/"*) ;;
+                *) continue ;;
+            esac
+            if [ "$dry_run" = 1 ]; then
+                echo "would remove  $target"
+            else
+                rm -f "$target"
+                echo "removed       $target"
+            fi
+            changed=1
+        done < <(comm -23 "$manifest_file" "$new_manifest")
+    fi
+
+    while IFS= read -r rel; do
+        [ -n "$rel" ] || continue
+        target="$HOME/$rel"
+        link="$repo/home/$rel"
+
+        if [ -L "$target" ] && [ "$(readlink "$target")" = "$link" ]; then
+            continue
+        fi
+
+        if [ "$dry_run" = 1 ]; then
+            if [ -e "$target" ] && [ ! -L "$target" ]; then
+                echo "would back up $target"
+            fi
+            echo "would link    $target -> $link"
+            changed=1
+            continue
+        fi
+
+        mkdir -p "$(dirname "$target")"
+        if [ -e "$target" ] && [ ! -L "$target" ]; then
+            mkdir -p "$backup/$(dirname "$rel")"
+            mv "$target" "$backup/$rel"
+            echo "backed up     $target -> $backup/$rel"
+        fi
+        ln -sfn "$link" "$target"
+        echo "linked        $target"
+        changed=1
+    done <"$new_manifest"
+
+    if [ "$dry_run" != 1 ]; then
+        install -d "$state_dir"
+        cp "$new_manifest" "$manifest_file"
+    fi
+
+    [ "$changed" = 1 ] || echo "already up to date"
+}
+
+cmd_update() {
+    [ -d "$repo/.git" ] || die "$repo is not a git repository"
+    git -C "$repo" pull --ff-only
+    cmd_apply 0 0
+}
+
+dry_run=0
+prune=0
+action=""
+for arg in "$@"; do
+    case "$arg" in
+        init | status | apply | update) action="$arg" ;;
+        --dry-run) dry_run=1 ;;
+        --prune) prune=1 ;;
+        -h | --help) usage; exit 0 ;;
+        *) usage >&2; exit 2 ;;
+    esac
+done
+
+case "$action" in
+    init) cmd_init ;;
+    status) cmd_status ;;
+    apply) cmd_apply "$dry_run" "$prune" ;;
+    update) cmd_update ;;
+    *) usage >&2; exit 2 ;;
+esac

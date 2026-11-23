@@ -1,17 +1,244 @@
 ---
 # yaml-language-server: $schema=https://schema.blue-build.org/recipe-v1.json
 name: fedora-hyprtomic
-description: Personal Fedora Atomic Hyprland image (wayblue base) with custom Hyprland UI
+description: Personal Fedora Atomic Hyprland image (wayblue base) with DMS and the Mozkey IME
 
 base-image: ghcr.io/wayblueorg/hyprland
 image-version: latest # wayblue's only supported tag; tracks current Fedora stable
 
-# Shared module lists, also used by recipe-vypr.yml:
-#   recipe-common-packages.yml - os-release + system packages (slow, stable)
-#   recipe-common-dotfiles.yml - skel dotfiles, build scripts, services, flatpaks
-# Keep the order (packages, then dotfiles) so dotfile edits do not invalidate
-# the package layer.
 modules:
-  - from-file: recipe-common-packages.yml
-  - from-file: recipe-common-dotfiles.yml
+  # NOTE: module order matters for layer caching. Slow-but-stable layers (dnf) go
+  # first; frequently-edited layers (files/scripts) go last so dotfile tweaks
+  # don't invalidate the package layer.
+
+  # 1. Rebrand os-release (wayblue sets NAME="wayblue", which leaks into GRUB entries)
+  - type: os-release
+    properties:
+      NAME: "HyprTomic"
+      PRETTY_NAME: "HyprTomic (powered by Fedora Atomic)"
+      VARIANT: "HyprTomic"
+      VARIANT_ID: "hyprtomic"
+      HOME_URL: "https://github.com/j7b3y/fedora-hyprtomic"
+      DOCUMENTATION_URL: "https://github.com/j7b3y/fedora-hyprtomic"
+      SUPPORT_URL: "https://github.com/j7b3y/fedora-hyprtomic/issues"
+      BUG_REPORT_URL: "https://github.com/j7b3y/fedora-hyprtomic/issues"
+      DEFAULT_HOSTNAME: "hyprtomic"
+
+  # 2. System-layer packages.
+  #
+  # New Order: the Arch GUI container is gone. Everything the shell needs is
+  # installed here, from the same COPRs the DMS project publishes, so the
+  # compositor, the shell and the IME all run on the host.
+  #
+  #   duxlabs/dms       dms, dms-cli
+  #   duxlabs/dux-repo  quickshell, matugen, dux-* (gop/search/calendar/files),
+  #                     dux-icons, material-symbols-fonts, ghostty
+  #   ririko66z/...     bibata-cursor-theme, jetbrains-mono-nf-fonts
+  #
+  # Mozkey IbG (the fcitx5 IME) is not in Fedora or a COPR. Upstream publishes
+  # an x86_64 Fedora RPM with the Fcitx5 frontend and the bundled Zenz runtime,
+  # so install-mozkey.sh fetches a pinned release and verifies its SHA256.
+  #
+  # quickshell comes from dux-repo, not Fedora, because DMS tracks quickshell
+  # upstream faster than the distro package. `quickshell` is requested by its
+  # exact name so dnf does not pick up `quickshell-git` from the cursor COPR
+  # (that repo also carries one; see files/dnf/ririko66z-dots-hyprland.repo).
+  - type: dnf
+    repos:
+      # Remove the COPR repo files after the build: DMS updates arrive by
+      # rebuilding the image. Users who want the -git variants can enable the
+      # COPR again through their machine manifest (ujust machine-apply).
+      cleanup: true
+      copr:
+        - duxlabs/dms
+        - duxlabs/dux-repo
+      files:
+        - ririko66z-dots-hyprland.repo # bibata-cursor-theme, jetbrains-mono-nf-fonts
+    install:
+      skip-unavailable: true
+      packages:
+        # --- DMS suite (shell, launcher, control center, notifications,
+        #     power menu, OSD, system monitor, search, calendar, file manager)
+        - dms
+        - dms-cli
+        - quickshell
+        - matugen
+        - dux-gop
+        - dux-search
+        - dux-calendar
+        - dux-files
+        - dux-icons
+        - material-symbols-fonts
+
+        # --- DMS runtime dependencies and recommendations
+        # (dms.spec: Requires accountsservice / qt6-qtmultimedia,
+        #  Recommends cava / cups-pk-helper / qt6ct / dux-search / dux-gop)
+        - accountsservice
+        - cups-pk-helper
+        - upower
+        - ddcutil
+        - cava
+        - libqalculate
+        - qt6ct
+        - qt5ct
+
+        # --- Qt6 stack for quickshell / DMS / SDDM theme
+        - qt6-qtbase
+        - qt6-qtdeclarative
+        - qt6-qtwayland
+        - qt6-qt5compat
+        - qt6-qtimageformats
+        - qt6-qtpositioning
+        - qt6-qtsensors
+        - qt6-qtquicktimeline
+        - qt6-qtmultimedia
+        - qt6-qtsvg
+        - qt6-qtvirtualkeyboard
+        - qt5-qtwayland
+
+        # --- Audio
+        - pipewire
+        - pipewire-pulseaudio
+        - wireplumber
+        - pavucontrol
+
+        # --- Network / Bluetooth (DMS control center drives them over D-Bus)
+        - NetworkManager
+        - bluez
+        - bluez-obexd
+
+        # --- Auth base (polkit + hyprpolkitagent provided by wayblue base)
+        - gnome-keyring
+        - gnome-keyring-pam
+        # Fingerprint support for the SDDM/hyprlock PAM gate. libfprint is
+        # generic; the CS9711 driver is a host-layer package.
+        - fprintd
+        - fprintd-pam
+
+        # --- Sunshine streaming host (JIS build, install-sunshine.sh)
+        - miniupnpc
+        - libcap
+        - libdrm
+        - libevdev
+        - opus
+        - libopusenc
+        - libva
+        - numactl-libs
+        - pulseaudio-libs
+        - libwayland-client
+        - vulkan-loader
+
+        # --- Fonts
+        - google-noto-sans-cjk-fonts
+        - google-noto-color-emoji-fonts
+        - jetbrains-mono-nf-fonts
+        - google-roboto-flex-fonts # DMS default UI face
+
+        # --- Icons / cursor (loaded by the compositor, so they must be on the host)
+        - papirus-icon-theme
+        - adw-gtk3-theme
+        - bibata-cursor-theme
+
+        # --- IME: fcitx5 + Mozkey IbG (upstream Fedora RPM, installed by
+        #     install-mozkey.sh). The RPM bundles its own Zenz runtime.
+        - fcitx5
+        - fcitx5-gtk
+        - fcitx5-qt
+        - fcitx5-configtool
+
+        # --- Screenshot / clipboard
+        - grim
+        - slurp
+        - wl-clipboard
+
+        # --- Xwayland (DMS/Hyprland recommendation; harmless if the base
+        #     already carries the Xwayland server)
+        - xwayland-satellite
+        - xdg-desktop-portal-gtk # FileChooser fallback (hyprland-portals.conf)
+
+        # --- File manager support (dfiles is the standard handler)
+        # dfiles optionally uses bwrap for sandboxed thumbnailers,
+        # ffmpegthumbnailer for video and pdftoppm for PDF thumbnails.
+        - gvfs
+        - gvfs-mtp
+        - gvfs-smb
+        - udisks2
+        - bubblewrap
+        - ffmpegthumbnailer
+        - poppler-utils
+        - file-roller
+
+        # --- Window switcher (DMS does not provide alt-tab)
+        - rofi
+
+        # --- Utilities used by the shell, keybinds and skel configs
+        - brightnessctl
+        - playerctl
+        - libnotify
+        - dex-autostart
+        - fastfetch
+        - wtype
+        - ydotool # provides /usr/lib/systemd/system/ydotool.service (linked as a user unit)
+        - xdg-utils
+        - desktop-file-utils
+        - shared-mime-info
+
+        # --- Terminal
+        - ghostty
+
+        # --- Shell / base CLI
+        - git
+        - git-credential-oauth
+        - zsh
+        - zsh-autosuggestions
+        - zsh-syntax-highlighting
+        - jq
+        - ripgrep
+        - rsync
+        - unzip
+        - btop
+
+        # --- User containers (not GUI: the shell no longer lives in one)
+        - distrobox
+
+  # 3. Bake dotfiles, SDDM conf/units, polkit rule, firstboot scripts, ujust recipe
+  - type: files
+    files:
+      - source: system
+        destination: /
+
+  # 4. Build-time scripts (live in files/scripts/; reference by bare filename)
+  - type: script
+    scripts:
+      - install-mozkey.sh
+      - install-sunshine.sh
+      - install-sddm-theme.sh
+      - finalize.sh
+
+  # 5. Enable firstboot/session services (user groups, zsh default; ydotool
+  #    as a user unit, mirroring upstream).
+  #
+  # dms.service is deliberately NOT enabled here: its unit has
+  # Requisite=graphical-session.target, so enabling it for default.target makes
+  # it start at login (before the compositor exports WAYLAND_DISPLAY) and fail.
+  # finalize.sh binds it to hyprland-session.target instead.
+  - type: systemd
+    system:
+      enabled:
+        - hyprtomic-groups.service
+        - hyprtomic-zsh-default.service
+    user:
+      enabled:
+        - ydotool.service
+
+  # 6. Default Flatpaks (system scope = auto-provisioned "standard" apps)
+  - type: default-flatpaks
+    configurations:
+      - notify: true
+        scope: system
+        install:
+          - org.mozilla.firefox
+          - org.gnome.Loupe
+          - com.bitwarden.desktop
+
   - type: signing # proper policy & signing for signed images

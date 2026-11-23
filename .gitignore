@@ -5,6 +5,9 @@ cosign.private
 *.iso-CHECKSUM
 /opencode.json
 /opencode.jsonc
+__pycache__/
 
 # Local notes (handoff/brainstorm) are not part of the repo.
-docs/
+# Design decisions under docs/design/ are tracked.
+docs/*
+!docs/design/

@@ -1,75 +1,50 @@
 # HyprTomic ujust recipes.
 # Loaded by ublue-os-just's justfile via `import "/usr/share/ublue-os/just/60-custom.just"`.
 
-# --- GUI container (Arch distrobox; the shell + GUI helpers live there) ---
+# just overrides must come *before* the recipe name:
+#   ujust overwrite=1 sync-skel-config
+#   ujust dry_run=1 user-config-apply
+overwrite := "0"
+dry_run := "0"
+prune := "0"
 
-# Create and initialize the GUI container (safe to re-run).
-gui-container-setup:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    /usr/bin/hyprtomic-gui-shell init
-    /usr/bin/hyprtomic-gui-shell status
-
-# Recreate the GUI container from the latest published image.
-gui-container-update:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    /usr/bin/hyprtomic-gui-shell update
-    /usr/bin/hyprtomic-gui-shell status
-
-# Recreate the GUI container from scratch (same as update, explicit).
-gui-container-reset:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    /usr/bin/hyprtomic-gui-shell reset
-    /usr/bin/hyprtomic-gui-shell status
-
-# Show whether the GUI container exists.
-gui-container-status:
-    @/usr/bin/hyprtomic-gui-shell status
-
-# --- Fonts ---
-
-# Fix CJK rendering in Chromium/Electron flatpaks: flatpak >= 1.18 exposes the
-# host fonts only through caches their bundled fontconfig cannot read, so every
-# host font disappears (Japanese renders as tofu). Writes a per-app
-# ~/.var/app/<id>/config/fontconfig/fonts.conf; restart the affected apps
-# afterwards. Also run automatically on session start.
-fix-flatpak-fonts:
-    @/usr/bin/hyprtomic-flatpak-fonts
-
-# Re-register the .desktop files of the other distrobox containers with the
-# host application dirs, so the quickshell launcher lists them (the launcher
-# groups them by container). Removes entries whose source app or container
-# disappeared and refreshes the mirrored icons. Also runs as the
-# hyprtomic-distrobox-apps.service user unit, which follows containers that
-# start after login; use this to force a pass.
-refresh-distrobox-apps:
-    @/usr/bin/hyprtomic-distrobox-apps
-
-# --- Dotfiles ---
+# --- Dotfiles (SKEL layer) ---
 
 # Sync the baked /etc/skel into $HOME (oameye/atomic-hyprland-style).
 # Pass overwrite=1 to replace managed files from the shipped skel and prune
 # files that previous overwrite runs synced but the image has since removed.
 # Leave the default to only copy files that don't yet exist.
-# Note: just overrides must come *before* the recipe name.
+# Files owned by the hyprtomic-user repository are never touched.
 # Example:
 #   ujust sync-skel-config                # safe -- skips files that exist
-#   ujust overwrite=1 sync-skel-config    # replace managed files from skel
-overwrite := "0"
-
+# ujust overwrite=1 sync-skel-config    # replace managed files from skel
 sync-skel-config:
     #!/usr/bin/env bash
     set -euo pipefail
-    if [ "{{overwrite}}" = "1" ]; then
-        state_dir="$HOME/.local/state/hyprtomic"
-        manifest_file="${state_dir}/skel-manifest"
-        new_manifest="$(mktemp)"
-        trap 'rm -f "$new_manifest"' EXIT
 
+    user_dir="${HYPRTOMIC_USER_DIR:-$HOME/.config/hyprtomic-user}"
+    state_dir="$HOME/.local/state/hyprtomic"
+    manifest_file="${state_dir}/skel-manifest"
+    new_manifest="$(mktemp)"
+    exclude_file="$(mktemp)"
+    trap 'rm -f "$new_manifest" "$exclude_file"' EXIT
+
+    # Paths the USR layer owns (symlinked by user-config-apply) and paths that
+    # are always user-owned. rsync patterns are anchored at the transfer root.
+    {
+        if [ -d "$user_dir/home" ]; then
+            (cd "$user_dir/home" && find . -mindepth 1 ! -type d -printf '/%P\n')
+        fi
+        printf '%s\n' \
+            '/.config/hypr/user.lua' \
+            '/.config/hypr/workspaces.lua' \
+            '/.config/hypr/local.conf' \
+            '/.config/hypr/host.lua'
+    } | LC_ALL=C sort -u >"$exclude_file"
+
+    if [ "{{ overwrite }}" = "1" ]; then
         install -d "$state_dir"
-        find /etc/skel -mindepth 1 ! -type d -printf '%P\n' | LC_ALL=C sort > "$new_manifest"
+        find /etc/skel -mindepth 1 ! -type d -printf '%P\n' | LC_ALL=C sort >"$new_manifest"
 
         # Prune files we synced on a previous overwrite run that the image has
         # since removed. Only runs when a manifest from a prior overwrite exists:
@@ -78,7 +53,12 @@ sync-skel-config:
         # app data, etc.) and a blind rm -rf would destroy unrelated files.
         if [ -f "$manifest_file" ]; then
             while IFS= read -r relpath; do
-                [ -n "$relpath" ] || continue
+                if [ -z "$relpath" ]; then
+                    continue
+                fi
+                if grep -qxF "/$relpath" "$exclude_file"; then
+                    continue
+                fi
                 target="$HOME/$relpath"
                 rm -f "$target"
 
@@ -93,27 +73,69 @@ sync-skel-config:
             echo "Replacing managed dotfiles from /etc/skel (first overwrite -- seeding manifest, no prune) ..."
         fi
 
-        rsync -av /etc/skel/ "$HOME/"
+        rsync -av --exclude-from="$exclude_file" /etc/skel/ "$HOME/"
         cp "$new_manifest" "$manifest_file"
     else
         echo "Syncing /etc/skel into \$HOME (skipping files that already exist) ..."
-        rsync -av --ignore-existing /etc/skel/ "$HOME/"
+        rsync -av --ignore-existing --exclude-from="$exclude_file" /etc/skel/ "$HOME/"
     fi
     echo
     echo "Done. Run 'hyprctl reload' or log out/in to apply."
 
-# --- SDDM login screen ---
+# --- User configuration (USR layer) ---
 
-# Enroll a fingerprint for login (SDDM empty-submit, sudo, hyprlock).
-# Run from a host terminal; the default is the right index finger, pass
-# another name to enroll more, e.g. `ujust enroll-fingerprint left-thumb`.
-enroll-fingerprint finger="right-index-finger":
+# Create the user configuration repository (~/.config/hyprtomic-user).
+user-config-init:
+    @/usr/libexec/hyprtomic/user-config init
+
+# Show link differences between the repository and $HOME.
+user-config-status:
+    @/usr/libexec/hyprtomic/user-config status
+
+# Symlink ~/.config/hyprtomic-user/home into $HOME.
+# Pass dry_run=1 to preview, prune=1 to drop links the repository removed.
+user-config-apply:
     #!/usr/bin/env bash
     set -euo pipefail
-    command -v fprintd-enroll >/dev/null || { echo "fprintd-enroll not found (update the host image first)"; exit 1; }
-    fprintd-enroll -f "{{finger}}"
-    echo
-    fprintd-list "$(id -un)"
+    args=()
+    if [ "{{ dry_run }}" = "1" ]; then
+        args+=(--dry-run)
+    fi
+    if [ "{{ prune }}" = "1" ]; then
+        args+=(--prune)
+    fi
+    /usr/libexec/hyprtomic/user-config apply "${args[@]}"
+
+# git pull --ff-only, then apply.
+user-config-update:
+    @/usr/libexec/hyprtomic/user-config update
+
+# --- Machine state (HOST layer, rpm-ostree) ---
+
+# Create an empty machine manifest (~/.config/hyprtomic-machine/machine.json).
+machine-init:
+    @/usr/libexec/hyprtomic/machine-config init
+
+# Show manifest entries that are not applied yet.
+machine-status:
+    @/usr/libexec/hyprtomic/machine-config status
+
+# Enable COPRs, layer packages, append kargs, install Flatpaks, enable units.
+# Pass dry_run=1 to preview. Packages and kargs are only ever added.
+machine-apply:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    args=()
+    if [ "{{ dry_run }}" = "1" ]; then
+        args+=(--dry-run)
+    fi
+    /usr/libexec/hyprtomic/machine-config apply "${args[@]}"
+
+# Rewrite hosts.<hostname> from the current machine state.
+machine-export:
+    @/usr/libexec/hyprtomic/machine-config export
+
+# --- SDDM login screen ---
 
 # Replace the SDDM login-screen wallpaper. Copies the astronaut theme to a
 # private name under /usr/local (=/var/usrlocal host state: survives updates)

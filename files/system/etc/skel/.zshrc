@@ -8,8 +8,6 @@ setopt hist_ignore_dups
 setopt hist_ignore_all_dups
 
 # Alias
-alias opencode='opencode2'
-alias vim='nvim'
 alias ls='ls --color=auto'
 alias grep='grep --color=auto'
 
@@ -74,10 +72,18 @@ if [[ "${terminfo[kend]}"  != "" ]]; then bindkey "${terminfo[kend]}"  end-of-li
 [[ -f /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh ]] && \
     source /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
 
+# Local bin (sunshine-session etc.)
+export PATH="$HOME/.local/bin:$PATH"
+
 # Extra shell snippets (e.g. generated terminal colors)
 for f in ~/.config/zshrc.d/*.zsh(N) ~/.config/zshrc.d/*.sh(N); do
     source "$f"
 done
 
-# Bitwarden SSH agent
-export SSH_AUTH_SOCK=~/.var/app/com.bitwarden.desktop/data/.bitwarden-ssh-agent.sock
+# Bitwarden SSH agent. Native builds use the home-directory socket; the
+# Flatpak path is kept as a fallback.
+if [[ -S "$HOME/.bitwarden-ssh-agent.sock" ]]; then
+    export SSH_AUTH_SOCK="$HOME/.bitwarden-ssh-agent.sock"
+elif [[ -S "$HOME/.var/app/com.bitwarden.desktop/data/.bitwarden-ssh-agent.sock" ]]; then
+    export SSH_AUTH_SOCK="$HOME/.var/app/com.bitwarden.desktop/data/.bitwarden-ssh-agent.sock"
+fi

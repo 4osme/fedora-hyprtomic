@@ -1,7 +1,7 @@
 /*
- * GTK3 palette for the default md3-cobalt-night theme (nemo, etc.).
- * Keep in sync with ~/.config/quickshell/ii/Theme.qml and
- * ~/.config/quickshell/ii/scripts/apply-theme.sh.
+ * GTK3 palette for the default md3-cobalt-night theme.
+ * DMS + matugen regenerate ~/.config/gtk-3.0/gtk.css when the wallpaper
+ * changes; this static copy is the pre-theming fallback.
  */
 
 @define-color bg_color #0F1117;

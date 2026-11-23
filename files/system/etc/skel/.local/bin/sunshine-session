@@ -1,0 +1,276 @@
+#!/usr/bin/env python3
+"""Manual Sunshine session helper for main-desktop.
+
+  start   create the HEADLESS-1 virtual output (1920x1080@60), switch Hyprland
+          to it (physical outputs disabled until `stop`) and restart the
+          Sunshine user unit
+  stop    stop Sunshine, re-apply Dux Shell's monitor layout (DMS outputs.lua)
+          and remove the virtual output
+  status  print the Sunshine unit and the current monitor layout
+
+Sunshine is intentionally not started by systemd at login. The display
+profile is defined in ~/.config/hypr/sunshine.lua and ~/.config/hypr/host.lua;
+the `session.active` marker written by this helper selects it, and
+hypr-stream-display.py respects it.
+"""
+import argparse
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
+import time
+
+RUNTIME = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"))
+os.environ.setdefault("XDG_RUNTIME_DIR", str(RUNTIME))
+STATE_DIR = RUNTIME / "sunshine-hypr-display"
+CONFIG = Path.home() / ".config/sunshine/sunshine.conf"
+HELPER = Path.home() / ".config/sunshine/hypr-stream-display.py"
+HEADLESS = "HEADLESS-1"
+HEADLESS_PREFIX = "HEADLESS-"
+MARKERS = ("1080p.active", "native.active", "state.json")
+# Session scope marker: while it exists the physical outputs stay disabled for
+# the whole session. A client connect/disconnect must not bring the 4K panel
+# back, that makes the stream heavier.
+SESSION_MARKER = STATE_DIR / "session.active"
+# The physical outputs that were on when the session started. They have to be
+# restored when it ends.
+PHYSICAL_STATE = STATE_DIR / "physical.json"
+
+
+def log(message):
+    print(f"sunshine-session: {message}", file=sys.stderr, flush=True)
+
+
+def run(*args, env=None, check=True):
+    return subprocess.run(
+        args, env=env, text=True, capture_output=True, check=check
+    )
+
+
+def hypr_env(signature=None):
+    try:
+        instances = json.loads(run("hyprctl", "instances", "-j").stdout)
+    except (subprocess.SubprocessError, json.JSONDecodeError, FileNotFoundError):
+        return None
+    if signature:
+        instances = [item for item in instances if item["instance"] == signature]
+    if len(instances) != 1:
+        return None
+    env = dict(os.environ, XDG_RUNTIME_DIR=str(RUNTIME))
+    env["HYPRLAND_INSTANCE_SIGNATURE"] = instances[0]["instance"]
+    return env
+
+
+def require_hypr():
+    env = hypr_env()
+    if not env:
+        raise RuntimeError("Hyprland is not running; log in first")
+    return env
+
+
+def monitors(env):
+    return json.loads(run("hyprctl", "monitors", "-j", env=env).stdout)
+
+
+def all_monitors(env):
+    return json.loads(run("hyprctl", "monitors", "all", "-j", env=env).stdout)
+
+
+def remove_output(env, name):
+    """Remove an output, but never the last remaining one."""
+    remaining = [item for item in monitors(env) if item["name"] != name]
+    if remaining:
+        run("hyprctl", "output", "remove", name, env=env)
+
+
+def remove_headless(env):
+    for name in [
+        item["name"] for item in monitors(env) if item["name"].startswith(HEADLESS_PREFIX)
+    ]:
+        remove_output(env, name)
+
+
+def ensure_headless(env, name=HEADLESS):
+    existing = [
+        item["name"] for item in monitors(env) if item["name"].startswith(HEADLESS_PREFIX)
+    ]
+    if name in existing:
+        return name
+    for other in existing:
+        if other != name:
+            remove_output(env, other)
+    run("hyprctl", "output", "create", "headless", name, env=env)
+    for _ in range(30):
+        time.sleep(0.1)
+        if name in {item["name"] for item in monitors(env)}:
+            return name
+    raise RuntimeError(f"headless output {name} did not appear")
+
+
+def set_config(key, value):
+    CONFIG.parent.mkdir(parents=True, exist_ok=True)
+    lines = CONFIG.read_text().splitlines() if CONFIG.exists() else []
+    pattern = re.compile(rf"^\s*{re.escape(key)}\s*=")
+    replaced = False
+    output = []
+    for line in lines:
+        if pattern.match(line):
+            output.append(f"{key} = {value}")
+            replaced = True
+        else:
+            output.append(line)
+    if not replaced:
+        output.append(f"{key} = {value}")
+    CONFIG.write_text("\n".join(output) + "\n")
+
+
+def sunshine(action, check=True):
+    # The unit is defined by modules/home-manager/sunshine.nix but not enabled.
+    run("systemctl", "--user", action, "sunshine", check=check)
+
+
+def clear_state():
+    for name in MARKERS:
+        (STATE_DIR / name).unlink(missing_ok=True)
+    SESSION_MARKER.unlink(missing_ok=True)
+
+
+def physical_outputs(env):
+    """The physical outputs that are on right now.
+
+    The session disables them, so they have to be remembered to be restored
+    when the session ends. Outputs that are already disabled stay disabled:
+    the user may have turned them off on purpose.
+    """
+    outputs = []
+    for item in monitors(env):
+        name = item.get("name", "")
+        if name.startswith(HEADLESS_PREFIX) or item.get("disabled"):
+            continue
+        outputs.append({
+            "output": name,
+            "mode": "%sx%s@%s" % (item.get("width"), item.get("height"),
+                                   item.get("refreshRate")),
+            "position": "%sx%s" % (item.get("x"), item.get("y")),
+            "scale": item.get("scale", 1.0),
+            "transform": item.get("transform", 0),
+        })
+    return outputs
+
+
+def outputs_restored(outputs, env):
+    """True when every remembered output is enabled again."""
+    enabled = {item.get("name") for item in all_monitors(env) if not item.get("disabled")}
+    return all(item["output"] in enabled for item in outputs)
+
+
+def start():
+    env = require_hypr()
+    STATE_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
+    already_active = SESSION_MARKER.exists()
+    name = ensure_headless(env)
+    # Remember the physical outputs and remember that they have to come back
+    # when the session ends. A second `start` sees them already disabled (the
+    # list is empty), so keep the state written by the first call.
+    outputs = physical_outputs(env)
+    if outputs or not PHYSICAL_STATE.exists():
+        PHYSICAL_STATE.write_text(json.dumps(outputs))
+        PHYSICAL_STATE.chmod(0o600)
+    try:
+        remembered = json.loads(PHYSICAL_STATE.read_text())
+    except (OSError, json.JSONDecodeError):
+        remembered = outputs
+    # Session scope: the physical outputs stay disabled for the whole session.
+    # A client connect/disconnect must not bring the 4K panel back: rendering
+    # to it costs GPU/CPU and makes the stream heavier.
+    SESSION_MARKER.touch(mode=0o600)
+    # Apply the layout: the physical outputs are disabled and the virtual
+    # output is pinned to the origin.
+    try:
+        set_config("capture", "wlr")
+        set_config("output_name", name)
+        run("hyprctl", "reload", env=env)
+        sunshine("restart")
+    except Exception:
+        if not already_active:
+            try:
+                stop()
+            except Exception as error:
+                log(f"rollback failed: {error}; run sunshine-session stop again")
+        raise
+    log(
+        f"started: Sunshine is capturing {name} (1920x1080@60); physical "
+        f"outputs disabled ({len(remembered)} remembered for the restore)"
+    )
+
+
+def stop():
+    sunshine("stop")
+    env = hypr_env()
+    had_session = SESSION_MARKER.exists() or PHYSICAL_STATE.exists()
+    try:
+        outputs = json.loads(PHYSICAL_STATE.read_text())
+    except (OSError, json.JSONDecodeError):
+        outputs = []
+    # Drop the session scope and the stale markers first: the reload restores
+    # the physical monitor layout from DMS (~/.config/hypr/dms/outputs.lua).
+    if had_session and not env:
+        raise RuntimeError("Hyprland is unavailable; preserving session state for retry")
+    clear_state()
+    if env:
+        run("hyprctl", "reload", env=env)
+        if had_session:
+            # Do not overwrite DMS rules with stale pre-session geometry.
+            if outputs and not outputs_restored(outputs, env):
+                raise RuntimeError("DMS reload did not restore all physical outputs; state retained for retry")
+            remove_headless(env)
+            if HEADLESS in {item["name"] for item in monitors(env)}:
+                raise RuntimeError("HEADLESS-1 could not be removed; state retained for retry")
+    PHYSICAL_STATE.unlink(missing_ok=True)
+    log("stopped: Sunshine stopped, DMS monitor layout restored, HEADLESS-1 removed")
+
+
+def status():
+    result = run("systemctl", "--user", "is-active", "sunshine", check=False)
+    print(f"sunshine: {result.stdout.strip() or result.stderr.strip()}")
+    env = hypr_env()
+    if not env:
+        print("hyprland: not running")
+        return
+    for monitor in monitors(env):
+        print(
+            "monitor: {name} {width}x{height}@{rate:.3f} at {x}x{y} disabled={disabled}".format(
+                name=monitor["name"],
+                width=monitor["width"],
+                height=monitor["height"],
+                rate=monitor["refreshRate"],
+                x=monitor["x"],
+                y=monitor["y"],
+                disabled=monitor.get("disabled", False),
+            )
+        )
+    for name in MARKERS[:-1]:
+        if (STATE_DIR / name).exists():
+            print(f"marker: {name}")
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("action", choices=("start", "stop", "status"))
+    args = parser.parse_args()
+    if args.action == "start":
+        start()
+    elif args.action == "stop":
+        stop()
+    else:
+        status()
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception as error:
+        log(str(error))
+        sys.exit(1)
