@@ -79,20 +79,12 @@ fi
 install -Dm644 /usr/share/hyprtomic/sunshine/sunshine.service \
     /usr/lib/systemd/user/sunshine.service
 
-echo "==> Sunshine: cleaning build tree and build dependencies"
+echo "==> Sunshine: cleaning build tree"
 rm -rf "$src" "$build" /root/.npm /root/.cache
-dnf remove -y --setopt=clean_requirements_on_remove=False \
-    cmake ninja-build gcc gcc-c++ nodejs npm \
-    python3-pip python3-jinja2 \
-    appstream glslc libappstream-glib desktop-file-utils \
-    libcap-devel libcurl-devel libdrm-devel libevdev-devel libva-devel \
-    libX11-devel libxcb-devel libXcursor-devel libXfixes-devel libXi-devel \
-    libXinerama-devel libXrandr-devel libXtst-devel \
-    mesa-libGL-devel mesa-libgbm-devel libgudev-devel \
-    miniupnpc-devel numactl-devel opus-devel pulseaudio-libs-devel \
-    openssl-devel pipewire-devel qt6-qtbase-devel qt6-qtsvg-devel \
-    vulkan-loader-devel || true
-dnf clean all
-rm -rf /var/cache/dnf /var/cache/libdnf5
+# Build dependencies stay in the image. `dnf remove` also drops runtime
+# packages that depend on them (the first CI run lost ghostty, flatpak,
+# file-roller, xdg-utils and libadwaita), and /var/cache/libdnf5 is a build
+# cache mount (`rm: Device or resource busy`). Pruning them safely needs a
+# separate build stage.
 
 echo "==> Sunshine: done"

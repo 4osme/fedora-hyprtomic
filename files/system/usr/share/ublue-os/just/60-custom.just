@@ -17,8 +17,7 @@ prune := "0"
 # Files owned by the hyprtomic-user repository are never touched.
 # Example:
 #   ujust sync-skel-config                # safe -- skips files that exist
-#   ujust overwrite=1 sync-skel-config    # replace managed files from skel
-[doc("Sync the baked /etc/skel into $HOME, skipping paths owned by the USR layer.")]
+# ujust overwrite=1 sync-skel-config    # replace managed files from skel
 sync-skel-config:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -86,18 +85,15 @@ sync-skel-config:
 # --- User configuration (USR layer) ---
 
 # Create the user configuration repository (~/.config/hyprtomic-user).
-[doc("Create the user configuration repository (~/.config/hyprtomic-user).")]
 user-config-init:
     @/usr/libexec/hyprtomic/user-config init
 
 # Show link differences between the repository and $HOME.
-[doc("Show link differences between the repository and $HOME.")]
 user-config-status:
     @/usr/libexec/hyprtomic/user-config status
 
 # Symlink ~/.config/hyprtomic-user/home into $HOME.
 # Pass dry_run=1 to preview, prune=1 to drop links the repository removed.
-[doc("Symlink ~/.config/hyprtomic-user/home into $HOME (dry_run=1, prune=1).")]
 user-config-apply:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -111,25 +107,21 @@ user-config-apply:
     /usr/libexec/hyprtomic/user-config apply "${args[@]}"
 
 # git pull --ff-only, then apply.
-[doc("git pull --ff-only in the user repository, then apply the links.")]
 user-config-update:
     @/usr/libexec/hyprtomic/user-config update
 
 # --- Machine state (HOST layer, rpm-ostree) ---
 
 # Create an empty machine manifest (~/.config/hyprtomic-machine/machine.json).
-[doc("Create an empty machine manifest (~/.config/hyprtomic-machine/machine.json).")]
 machine-init:
     @/usr/libexec/hyprtomic/machine-config init
 
 # Show manifest entries that are not applied yet.
-[doc("Show machine manifest entries that are not applied yet.")]
 machine-status:
     @/usr/libexec/hyprtomic/machine-config status
 
 # Enable COPRs, layer packages, append kargs, install Flatpaks, enable units.
 # Pass dry_run=1 to preview. Packages and kargs are only ever added.
-[doc("Apply COPRs, layered packages, kargs, Flatpaks and user units (dry_run=1).")]
 machine-apply:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -140,7 +132,6 @@ machine-apply:
     /usr/libexec/hyprtomic/machine-config apply "${args[@]}"
 
 # Rewrite hosts.<hostname> from the current machine state.
-[doc("Rewrite hosts.<hostname> in the machine manifest from this machine.")]
 machine-export:
     @/usr/libexec/hyprtomic/machine-config export
 
@@ -150,7 +141,6 @@ machine-export:
 # private name under /usr/local (=/var/usrlocal host state: survives updates)
 # and selects it via /etc/sddm.conf.d/zz-wallpaper.conf (sorts after the
 # baked zz-theme.conf). Undo: delete both paths and restart sddm.
-[doc("Replace the SDDM login-screen wallpaper (path=<image>).")]
 login-wallpaper path:
     #!/usr/bin/env bash
     set -euo pipefail

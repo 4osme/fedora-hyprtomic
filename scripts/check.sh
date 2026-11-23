@@ -105,9 +105,11 @@ fi
 
 echo "==> justfile"
 if command -v just >/dev/null 2>&1; then
+    # Parse the file with `--list`; `--fmt --check` output differs between just
+    # versions, so formatting stays a local/CI-editor concern.
     just --unstable \
         --justfile files/system/usr/share/ublue-os/just/60-custom.just \
-        --fmt --check || fail=1
+        --list >/dev/null || fail=1
     echo "ok    60-custom.just"
 else
     warn "just not installed; skipping justfile"
