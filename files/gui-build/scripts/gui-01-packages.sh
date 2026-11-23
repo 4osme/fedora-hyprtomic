@@ -10,7 +10,7 @@ pacman -Syu --noconfirm
 PACMAN_PKGS=(
   # toolchain (AUR builds) + general CLI
   base-devel git go
-  fish eza starship btop fastfetch jq go-yq ripgrep wget rsync unzip bc uv
+  fish eza starship fastfetch jq go-yq ripgrep wget rsync unzip bc uv
   python-pip python-gobject python-cairo gtk3 # gtk3: resolve-icons.py (PyGObject Gtk)
   # terminal (container side; the host has its own ghostty from
   # install-ghostty.sh, so this one stays inside the container)
@@ -18,14 +18,24 @@ PACMAN_PKGS=(
   # GUI apps / widgets
   fuzzel cava libqalculate songrec translate-shell hyprpicker wf-recorder swappy
   rofi # wayland-native since 2.0 (provides/replaces the old rofi-wayland); shelf search + window switcher
+  # monitor/output management GUI (GTK3): drag displays, set resolution/scale/
+  # rotation, apply. Writes ~/.config/hypr/{monitors,workspaces}.lua, which
+  # hyprland.lua requires when present (see "nwg-displays support").
+  nwg-displays
   tesseract tesseract-data-eng tesseract-data-jpn imagemagick
   wtype cliphist brightnessctl playerctl libnotify dex
   kdialog kirigami syntax-highlighting matugen
   # audio / video clients (daemons live on the host)
   pavucontrol
+  # video player (Qt6/QML on libmpv). Follows the desktop theme (Kirigami
+  # colors from the generated kdeglobals, widgets from qt6ct/Kvantum) and
+  # speaks MPRIS, so playerctl / the media keys control it. The skel desktop
+  # entry makes it the host's handler for video files too (nemo / xdg-open;
+  # see hyprtomic-gui-shell).
+  haruna
   # session helpers used by the shell (systemd/hyprland sockets are shared)
   uwsm           # launcher starts apps via `uwsm app` scopes
-  networkmanager # nmcli -> host NetworkManager over the shared system D-Bus
+  networkmanager # nmcli client; the daemon runs on the host (see DBUS_SYSTEM_BUS_ADDRESS)
   hyprlock       # power menu lock action
   # Qt6 stack used by quickshell / ii
   qt6-base qt6-declarative qt6-wayland qt6-5compat qt6-imageformats
@@ -36,8 +46,10 @@ PACMAN_PKGS=(
   # fonts (base: noto CJK + emoji; decorations added in the AUR step)
   noto-fonts noto-fonts-cjk noto-fonts-emoji ttf-jetbrains-mono-nerd
   ttf-material-symbols-variable
-  # icon theme (GTK/Qt/launcher icon resolution)
-  papirus-icon-theme
+  # icon theme. Papirus stays on the host; distrobox bind-mounts the host's
+  # /usr/share/icons at /usr/local/share/icons, so it is still available inside
+  # the container without a second copy.
+  tela-circle-icon-theme-standard
   # file manager (Base Dotfiles override: nemo)
   nemo nemo-fileroller nemo-image-converter nemo-python
   # IME

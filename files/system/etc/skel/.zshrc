@@ -80,5 +80,5 @@ for f in ~/.config/zshrc.d/*.zsh(N) ~/.config/zshrc.d/*.sh(N); do
     source "$f"
 done
 
-# Bitwarden SSH agent
-export SSH_AUTH_SOCK=~/.bitwarden-ssh-agent.sock
+# Bitwarden SSH agent (Flatpak build)
+export SSH_AUTH_SOCK=~/.var/app/com.bitwarden.desktop/data/.bitwarden-ssh-agent.sock

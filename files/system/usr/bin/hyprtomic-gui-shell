@@ -17,9 +17,20 @@ set -uo pipefail
 CONTAINER="${HYPRTOMIC_GUI_CONTAINER:-hyprtomic-gui}"
 IMAGE="${HYPRTOMIC_GUI_IMAGE:-ghcr.io/j7b3y/hyprtomic-gui:latest}"
 
+# Container existence: `distrobox list | grep` can miss containers that the
+# container manager still knows about, in which case `distrobox create` fails
+# with "already exists" (and exits 0), turning updates into silent no-ops.
+# Ask podman directly and fall back to distrobox for non-podman setups.
 exists() {
+    if command -v podman >/dev/null 2>&1 && podman container inspect "$CONTAINER" >/dev/null 2>&1; then
+        return 0
+    fi
     distrobox list --no-color 2>/dev/null | grep -qw "$CONTAINER"
 }
+
+# Image ID (the OCI config digest) of a tag, and of the image a container runs.
+image_id() { podman image inspect -f '{{.Id}}' "$1" 2>/dev/null; }
+container_image_id() { podman container inspect -f '{{.Image}}' "$CONTAINER" 2>/dev/null; }
 
 # Older images exported the container's ghostty to ~/.local/bin. That shim
 # shadows the host ghostty on PATH, so the terminal keybind opened an Arch
@@ -30,6 +41,39 @@ remove_stale_ghostty_shim() {
     if [ -f "$shim" ] && grep -q "distrobox" "$shim" 2>/dev/null; then
         rm -f "$shim"
     fi
+}
+
+# Haruna (GUI container) is the video player for both sides: the desktop entry
+# shipped in skel is visible to the host (shared $HOME), and its Exec=haruna
+# resolves through the exported shim. Point the MIME types it declares at it,
+# but only where no handler is set yet, so a user's own choice (a flatpak
+# player, another default) is never overwritten. gio/glib exists on the host
+# and in the container; the shared ~/.config/mimeapps.list serves both.
+register_haruna_mimes() {
+    local entry="$HOME/.local/share/applications/org.kde.haruna.desktop"
+    [ -f "$entry" ] || return 0
+    [ -x "$HOME/.local/bin/haruna" ] || return 0
+    command -v gio >/dev/null 2>&1 || return 0
+
+    local mimes mime line
+    mimes="$(sed -n 's/^MimeType=//p' "$entry")"
+    mimes="${mimes%%$'\n'*}"
+    [ -n "$mimes" ] || return 0
+
+    local IFS=';'
+    for mime in $mimes; do
+        [ -n "$mime" ] || continue
+        # "Default application for ...: <id>.desktop" when one is set; the
+        # "no default" wording varies across glib versions, so look for the
+        # id instead of parsing the message. No `head` here: pipefail would
+        # turn its SIGPIPE into a nonzero pipeline status.
+        line="$(LC_ALL=C gio mime "$mime" 2>/dev/null)"
+        line="${line%%$'\n'*}"
+        case "$line" in
+            *".desktop"*) continue ;;
+        esac
+        gio mime "$mime" org.kde.haruna.desktop >/dev/null 2>&1 || true
+    done
 }
 
 # BlueBuild's post_build wipes /var in the image (ostree assumption), so the
@@ -47,12 +91,38 @@ init_container() {
     # ghostty is NOT exported: the host has its own ghostty (install-ghostty.sh
     # via the scottames/ghostty COPR), and a container shim here would shadow it
     # on PATH and turn Super+Q into an Arch-container shell.
-    distrobox enter "$CONTAINER" -- bash -lc '
-        for bin in hypremoji hyprbind fuzzel wlogout swappy hyprpicker \
-                   rofi clipse-gui clipse; do
+    #
+    # The same pass prunes old exports of this container that are no longer in
+    # the list (e.g. a tool dropped from it): a shim is removed only when it
+    # carries distrobox's `# distrobox_binary` marker, names this container
+    # (`# name:` line or the `-n <container>` argument) and is not exported
+    # below. Hand-written files such as sunshine-wrap.sh never match.
+    distrobox enter "$CONTAINER" -- \
+        env HYPRTOMIC_EXPORT_CONTAINER="$CONTAINER" bash -lc '
+        # haruna is exported for the skel desktop entry (Exec=haruna), which
+        # lets host nemo / xdg-open open videos with the container player.
+        # register_haruna_mimes (run on the host) points the MIME handlers at
+        # it.
+        export_bins="hypremoji hyprbind fuzzel wlogout swappy hyprpicker \
+                     rofi clipse-gui clipse nwg-displays haruna"
+        for bin in $export_bins; do
             [ -x "/usr/bin/$bin" ] || continue
             distrobox-export --bin "/usr/bin/$bin" \
                 --export-path "$HOME/.local/bin" >/dev/null 2>&1 || true
+        done
+        container="${HYPRTOMIC_EXPORT_CONTAINER:-${CONTAINER_ID:-}}"
+        for shim in "$HOME/.local/bin"/*; do
+            [ -f "$shim" ] || continue
+            grep -q "^# distrobox_binary$" "$shim" 2>/dev/null || continue
+            if ! grep -q "^# name: ${container}$" "$shim" 2>/dev/null &&
+               ! grep -qF " -n ${container} " "$shim" 2>/dev/null; then
+                continue
+            fi
+            name="$(basename "$shim")"
+            case " $export_bins " in
+                *" $name "*) continue ;;
+            esac
+            rm -f "$shim"
         done
     '
 
@@ -68,6 +138,11 @@ init_container() {
                 -r /usr/share/hyprtomic/uv-requirements.txt
         fi
     '
+
+    # Make the just-exported Haruna the video handler right away (no need to
+    # wait for the next login); a no-op while the skel desktop entry is still
+    # missing.
+    register_haruna_mimes
 }
 
 ensure() {
@@ -82,10 +157,35 @@ ensure() {
 }
 
 cmd_update() {
-    if exists; then
-        distrobox rm -f "$CONTAINER" || return 1
+    # Refresh the tag first. When the tag has not moved this only fetches the
+    # manifest (no layer download); when it has moved, `distrobox create`
+    # would otherwise reuse the stale local image for the same tag.
+    if command -v podman >/dev/null 2>&1; then
+        podman pull "$IMAGE" || return 1
     fi
-    ensure
+
+    # Nothing to do when the container already runs the pulled image.
+    local current target
+    current="$(container_image_id)"
+    target="$(image_id "$IMAGE")"
+    if [ -n "$target" ] && [ "$current" = "$target" ]; then
+        echo "GUI container '$CONTAINER' already uses $IMAGE" >&2
+        return 0
+    fi
+
+    # Recreate unconditionally: a failing `exists` check used to leave the
+    # container in place while `distrobox create` exited 0 with "already
+    # exists", so updates silently did nothing.
+    distrobox rm -f "$CONTAINER" >/dev/null 2>&1 || true
+    ensure || return 1
+
+    # Verify the recreate instead of reporting success blindly.
+    current="$(container_image_id)"
+    target="$(image_id "$IMAGE")"
+    if [ -n "$target" ] && [ "$current" != "$target" ]; then
+        echo "failed to recreate '$CONTAINER' from $IMAGE" >&2
+        return 1
+    fi
 }
 
 gui_env=(
@@ -104,6 +204,14 @@ gui_env=(
     # quickshell config directory name under ~/.config/quickshell (default: ii).
     "HYPRTOMIC_QS_CONFIG=${HYPRTOMIC_QS_CONFIG:-ii}"
 )
+
+# BlueZ (bluetoothctl) and NetworkManager (nmcli) are host services on the
+# system D-Bus, but distrobox only shares the user session bus. Point
+# system-bus clients at the host socket mounted by distrobox so the shell's
+# Bluetooth/Network panels talk to the real daemons.
+if [ -S /run/dbus/system_bus_socket ] && [ -z "${DBUS_SYSTEM_BUS_ADDRESS:-}" ]; then
+    gui_env+=("DBUS_SYSTEM_BUS_ADDRESS=unix:path=/run/host/run/dbus/system_bus_socket")
+fi
 
 # VM (virtio-gpu): Qt's EGL path fails ("egl failed to create dri2 screen"),
 # which makes Qt Quick apps (quickshell, ghostty) die. Force software rendering
@@ -125,11 +233,52 @@ case "${1:-}" in
     "" )
         ensure || exit 1
         remove_stale_ghostty_shim
+        # Covers the skel sync that first brought the Haruna desktop entry (and
+        # host updates in general). Only MIME types without a handler yet are
+        # touched. The flatpak/Discord setup further down is unrelated.
+        register_haruna_mimes
+        # Chromium/Electron flatpaks lose the host fonts under flatpak >= 1.18
+        # (remap-dir caches vs their bundled fontconfig). Idempotent; affected
+        # apps must be restarted to pick the fix up.
+        /usr/bin/hyprtomic-flatpak-fonts >/dev/null 2>&1 || true
+        # Flatseal only offers its per-app "Background" (run in background /
+        # autostart) toggle once the flatpak permission store has a
+        # background/background row, and nothing creates that row until an app
+        # asks the Background portal. Seed an empty row so the permission can
+        # be granted before the first request.
+        if ! flatpak permission-list background 2>/dev/null | grep -q .; then
+            flatpak permission-set background background '' >/dev/null 2>&1 || true
+        fi
+        # Discord Rich Presence: a flatpak Discord client (Vesktop) keeps its
+        # IPC socket in its sandbox runtime dir, while games and other apps
+        # look for it at $XDG_RUNTIME_DIR/discord-ipc-0. Point the standard
+        # path at the installed client and let every flatpak reach it (see
+        # https://vesktop.dev/wiki/linux/flatpak/). An existing symlink (e.g.
+        # from a ~/.config/user-tmpfiles.d entry) is left alone.
+        for client in dev.vencord.Vesktop com.discordapp.Discord; do
+            flatpak list --app --columns=application 2>/dev/null | grep -qx "$client" || continue
+            if ! flatpak override --user --show 2>/dev/null | grep -q "xdg-run/discord-ipc-0"; then
+                flatpak override --user \
+                    --filesystem="xdg-run/.flatpak/$client:create" \
+                    --filesystem=xdg-run/discord-ipc-0 >/dev/null 2>&1 || true
+            fi
+            link="$XDG_RUNTIME_DIR/discord-ipc-0"
+            if [ ! -e "$link" ] && [ ! -L "$link" ]; then
+                ln -s ".flatpak/$client/xdg-run/discord-ipc-0" "$link" || true
+            fi
+            break
+        done
         # Keep the shell's stderr/stdout in the (shared) home: Hyprland's exec
         # loses it, and QML errors are the usual reason the bar does not appear.
         log="$HOME/.local/state/hyprtomic/gui-session.log"
         mkdir -p "$(dirname "$log")"
         echo "=== hyprtomic-gui-shell $(date -Is) ===" >>"$log"
+        # Register the other distroboxes' .desktop files for the launcher
+        # (background: entering each container takes a moment, and the shell
+        # picks the new entries up live). hyprtomic-distrobox-apps.service
+        # covers containers started after login; this pass is the cheap
+        # fallback. See hyprtomic-distrobox-apps.
+        /usr/bin/hyprtomic-distrobox-apps >>"$log" 2>&1 &
         exec distrobox enter "$CONTAINER" -- \
             env "${gui_env[@]}" bash -lc 'exec hyprtomic-gui-session' \
             >>"$log" 2>&1

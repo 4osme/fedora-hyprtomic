@@ -35,6 +35,25 @@ gui-container-reset:
 gui-container-status:
     @/usr/bin/hyprtomic-gui-shell status
 
+# --- Fonts ---
+
+# Fix CJK rendering in Chromium/Electron flatpaks: flatpak >= 1.18 exposes the
+# host fonts only through caches their bundled fontconfig cannot read, so every
+# host font disappears (Japanese renders as tofu). Writes a per-app
+# ~/.var/app/<id>/config/fontconfig/fonts.conf; restart the affected apps
+# afterwards. Also run automatically on session start.
+fix-flatpak-fonts:
+    @/usr/bin/hyprtomic-flatpak-fonts
+
+# Re-register the .desktop files of the other distrobox containers with the
+# host application dirs, so the quickshell launcher lists them (the launcher
+# groups them by container). Removes entries whose source app or container
+# disappeared and refreshes the mirrored icons. Also runs as the
+# hyprtomic-distrobox-apps.service user unit, which follows containers that
+# start after login; use this to force a pass.
+refresh-distrobox-apps:
+    @/usr/bin/hyprtomic-distrobox-apps
+
 # --- Dotfiles (SKEL layer) ---
 
 # Sync the baked /etc/skel into $HOME (oameye/atomic-hyprland-style).
