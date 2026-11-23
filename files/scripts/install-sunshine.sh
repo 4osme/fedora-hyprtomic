@@ -34,9 +34,16 @@ dnf install -y --setopt=install_weak_deps=False \
 
 echo "==> Sunshine: fetching ${commit}"
 rm -rf "$src" "$build"
-git clone https://github.com/LizardByte/Sunshine.git "$src"
-git -C "$src" checkout "$commit"
-git -C "$src" submodule update --init --recursive
+git clone --depth 1 --branch v2026.914.233613 \
+    https://github.com/LizardByte/Sunshine.git "$src"
+if [ "$(git -C "$src" rev-parse HEAD)" != "$commit" ]; then
+    echo "unexpected Sunshine commit; expected ${commit}" >&2
+    exit 1
+fi
+# The pinned submodule commits are usually reachable with a shallow fetch; fall
+# back to a full submodule fetch when the server cannot serve them.
+git -C "$src" submodule update --init --recursive --depth 1 ||
+    git -C "$src" submodule update --init --recursive
 
 echo "==> Sunshine: applying JIS patches"
 git -C "$src" apply "${patches}/0001-sunshine-non-normalized-key-flag.patch"
