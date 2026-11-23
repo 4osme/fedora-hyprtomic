@@ -10,7 +10,6 @@ on:
       - "recipes/recipe.yml"
       - "files/system/**"
       - "files/scripts/**"
-      - "!files/scripts/gui-*" # GUI-only scripts build in gui.yml
       - "files/dnf/**"
       - "!**/*.md"
       - ".github/workflows/build.yml"
@@ -49,7 +48,6 @@ jobs:
               - "recipes/recipe.yml"
               - "files/system/**"
               - "files/scripts/**"
-              - "!files/scripts/gui-*"
               - "files/dnf/**"
               - "!**/*.md"
               - ".github/workflows/build.yml"

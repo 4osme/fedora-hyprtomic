@@ -13,8 +13,8 @@ an Arch distrobox container.
 - **HOST** — machine-specific rpm-ostree state (layered packages, kargs, COPRs)
   in a separate manifest, applied with `ujust machine-apply`.
 
-The old Arch GUI container is no longer used. Its files are kept only until the
-New Order image has been validated, then removed.
+The Arch GUI container has been removed: Hyprland, DMS, the IME, the file
+manager and the streaming stack all run on the Fedora Atomic host.
 
 ## Repository layout
 
@@ -25,7 +25,6 @@ New Order image has been validated, then removed.
 | `files/scripts/**` | Build-time scripts (Mozkey RPM, Sunshine source build, SDDM theme, finalize) |
 | `scripts/check.sh` | Linux/WSL checks that do not need a container build |
 | `docs/design/**` | Layer/design decisions (tracked) |
-| `recipes/gui.yml`, `files/gui*/**` | **Deprecated** GUI container (pending removal) |
 | `AGENTS.md` | Architecture notes, conventions and change rules |
 
 ## Installation

@@ -13,7 +13,7 @@
 # the bundled fontconfig scans the fonts and builds its own caches. Restart
 # the affected app afterwards.
 #
-# Run at session start by hyprtomic-gui-shell, or manually:
+# Run at session start from hyprland.lua, or manually:
 #   hyprtomic-flatpak-fonts
 #   ujust fix-flatpak-fonts
 set -uo pipefail

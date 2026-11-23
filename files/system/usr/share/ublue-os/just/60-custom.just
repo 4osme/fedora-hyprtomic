@@ -8,33 +8,6 @@ overwrite := "0"
 dry_run := "0"
 prune := "0"
 
-# --- GUI container (Arch distrobox; the shell + GUI helpers live there) ---
-
-# Create and initialize the GUI container (safe to re-run).
-gui-container-setup:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    /usr/bin/hyprtomic-gui-shell init
-    /usr/bin/hyprtomic-gui-shell status
-
-# Recreate the GUI container from the latest published image.
-gui-container-update:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    /usr/bin/hyprtomic-gui-shell update
-    /usr/bin/hyprtomic-gui-shell status
-
-# Recreate the GUI container from scratch (same as update, explicit).
-gui-container-reset:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    /usr/bin/hyprtomic-gui-shell reset
-    /usr/bin/hyprtomic-gui-shell status
-
-# Show whether the GUI container exists.
-gui-container-status:
-    @/usr/bin/hyprtomic-gui-shell status
-
 # --- Fonts ---
 
 # Fix CJK rendering in Chromium/Electron flatpaks: flatpak >= 1.18 exposes the
@@ -44,15 +17,6 @@ gui-container-status:
 # afterwards. Also run automatically on session start.
 fix-flatpak-fonts:
     @/usr/bin/hyprtomic-flatpak-fonts
-
-# Re-register the .desktop files of the other distrobox containers with the
-# host application dirs, so the quickshell launcher lists them (the launcher
-# groups them by container). Removes entries whose source app or container
-# disappeared and refreshes the mirrored icons. Also runs as the
-# hyprtomic-distrobox-apps.service user unit, which follows containers that
-# start after login; use this to force a pass.
-refresh-distrobox-apps:
-    @/usr/bin/hyprtomic-distrobox-apps
 
 # --- Dotfiles (SKEL layer) ---
 

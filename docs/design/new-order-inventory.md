@@ -71,7 +71,7 @@
 | SDDM astronaut theme（git clone） | build script | IMG | **移設（完了）** | rev + SHA256 を固定し、fingerprint status 付き QML をオーバーレイ |
 | dconf system db（`00-desktop`） | files/system | IMG | 継続 | GTK 既定値。DMS が後から上書き |
 
-### 1.2 Arch GUI コンテナ（`recipes/gui.yml` / `files/gui-build/`）
+### 1.2 Arch GUI コンテナ（`recipes/gui.yml` / `files/gui-build/`）— 削除済み
 
 | コンポーネント | 旧配置 | 新レイヤ | 判定 | 備考 |
 |---|---|---|---|---|
@@ -112,8 +112,8 @@
 | ttf-hackgen-nerd / ttf-twemoji | container | IMG | **統合** | Fedora パッケージへ読み替え |
 | hyprbind（prebuilt pacman） | container | — | **廃止** | DMS の keybinds モーダルに置換 |
 | Google Sans Flex（COPR RPM 抽出） | container | — | **廃止** | NixOS では Roboto Flex に置換済み |
-| hyprtomic-gui-session / uv venv / gui-99-finalize | container | — | **廃止** | コンテナ廃止に伴う |
-| hyprtomic-gui-shell（ホスト側管理 CLI） | files/system | — | **廃止** | `ujust gui-container-*` も削除 |
+| hyprtomic-gui-session / uv venv / gui-99-finalize | container | — | **廃止（削除済み）** | コンテナ廃止に伴う |
+| hyprtomic-gui-shell（ホスト側管理 CLI） | files/system | — | **廃止（削除済み）** | `ujust gui-container-*` も削除 |
 
 ### 1.3 skel / 設定ファイル
 
@@ -155,7 +155,7 @@
 | setup-groups / setup-hostname / setup-zsh | files/system | IMG | 継続 | |
 | Bitwarden polkit action | files/system | IMG | 継続 | Flatpak 既定アプリ用 |
 | ujust `sync-skel-config` | files/system | IMG | **継続（v2 へ改修）** | ユーザー設定レイヤの scaffold を追加 |
-| ujust `gui-container-*` | files/system | — | **廃止** | |
+| ujust `gui-container-*` | files/system | — | **廃止（削除済み）** | |
 | ujust `login-wallpaper` | files/system | IMG | 継続 | |
 | THIRD-PARTY-NOTICES / licenses | files/system | IMG | 継続 | |
 
@@ -164,8 +164,8 @@
 | コンポーネント | 判定 | 備考 |
 |---|---|---|
 | `recipes/recipe.yml` | **継続（全面改修）** | COPR 追加、コンテナ関連削除 |
-| `recipes/gui.yml` | **廃止** | |
-| `files/gui-build/**` / `files/gui/**` | **廃止** | |
+| `recipes/gui.yml` | **廃止（削除済み）** | |
+| `files/gui-build/**` / `files/gui/**` | **廃止（削除済み）** | |
 | `install-ghostty.sh` | **削除済み** | COPR `duxlabs/dux-repo` の `ghostty` に置換 |
 | `install-sddm-theme.sh` | **更新済み** | rev `abb3163c` + SHA256 を固定。QML オーバーレイを `usr/share/hyprtomic/sddm/` から適用 |
 | `finalize.sh` | 継続（整理） | dconf update 等 |
@@ -339,7 +339,7 @@ USR / HOST レイヤの詳細（rpm-ostree のレイヤ済みパッケージ・k
 
 ---
 
-## 4. 廃止リスト（確定）
+## 4. 廃止リスト（確定・削除済み）
 
 - Arch GUI コンテナ一式: `recipes/gui.yml`、`files/gui/**`、`files/gui-build/**`、`hyprtomic-gui-shell`、`hyprtomic-gui-session`、`ujust gui-container-*`。
 - 旧カスタム Quickshell シェル `~/.config/quickshell/ii/**`。
