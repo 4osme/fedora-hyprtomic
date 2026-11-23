@@ -148,11 +148,10 @@
 | dconf db / profile | files/system | IMG | 継続 | |
 | modules-load.d/uinput.conf / udev 99-uinput.rules | files/system | IMG | 継続 | ydotool 用 |
 | sddm.conf.d / テーマアセット | files/system | IMG | 継続 | NixOS の fingerprint status 版へ |
-| hyprtomic-hostname.service | files/system | IMG | 継続 | 初回ホスト名 |
 | hyprtomic-groups.service | files/system | IMG | 継続 | ユーザーグループ |
 | hyprtomic-zsh-default.service | files/system | IMG | 継続 | 既定シェル |
 | ydotool.service（user unit） | files/system | IMG | 継続 | |
-| setup-groups / setup-hostname / setup-zsh | files/system | IMG | 継続 | |
+| setup-groups / setup-zsh | files/system | IMG | 継続 | |
 | Bitwarden polkit action | files/system | IMG | 継続 | Flatpak 既定アプリ用 |
 | ujust `sync-skel-config` | files/system | IMG | **継続（v2 へ改修）** | ユーザー設定レイヤの scaffold を追加 |
 | ujust `gui-container-*` | files/system | — | **廃止（削除済み）** | |

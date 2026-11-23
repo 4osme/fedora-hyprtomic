@@ -8,16 +8,6 @@ overwrite := "0"
 dry_run := "0"
 prune := "0"
 
-# --- Fonts ---
-
-# Fix CJK rendering in Chromium/Electron flatpaks: flatpak >= 1.18 exposes the
-# host fonts only through caches their bundled fontconfig cannot read, so every
-# host font disappears (Japanese renders as tofu). Writes a per-app
-# ~/.var/app/<id>/config/fontconfig/fonts.conf; restart the affected apps
-# afterwards. Also run automatically on session start.
-fix-flatpak-fonts:
-    @/usr/bin/hyprtomic-flatpak-fonts
-
 # --- Dotfiles (SKEL layer) ---
 
 # Sync the baked /etc/skel into $HOME (oameye/atomic-hyprland-style).
