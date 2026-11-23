@@ -1,0 +1,286 @@
+#!/usr/bin/env bash
+# HyprTomic HOST layer: rpm-ostree state kept in a separate manifest.
+#
+# Settings live in the hyprtomic-user repository (symlinked into $HOME). This
+# script manages the machine-specific layer that cannot live in the image:
+# layered packages, kernel arguments, COPRs, user Flatpaks and user units.
+#
+# The manifest is JSON so it can be read and edited with jq. `common` applies
+# to every machine, `hosts.<hostname>` (hostname -s) is added on top.
+#
+# Environment:
+#   HYPRTOMIC_MACHINE_FILE  manifest path
+#                           (default: ~/.config/hyprtomic-machine/machine.json)
+set -euo pipefail
+
+file="${HYPRTOMIC_MACHINE_FILE:-$HOME/.config/hyprtomic-machine/machine.json}"
+host="$(hostname -s)"
+dry_run=0
+
+die() { echo "machine-config: $*" >&2; exit 1; }
+
+usage() {
+    cat <<'EOF'
+usage: machine-config <init|status|apply|export> [--dry-run]
+
+  init    create an empty machine.json (git init included)
+  status  show manifest entries that are not applied yet
+  apply   enable COPRs, layer packages, append kargs, install Flatpaks, enable units
+  export  rewrite hosts.<hostname> from the current machine state
+          (kargs are left untouched: they are edited by hand)
+
+options:
+  --dry-run  print what apply would do
+
+environment:
+  HYPRTOMIC_MACHINE_FILE  manifest path
+                          (default: ~/.config/hyprtomic-machine/machine.json)
+EOF
+}
+
+require_manifest() {
+    [ -f "$file" ] || die "no $file (run 'ujust machine-init')"
+    command -v jq >/dev/null 2>&1 || die "jq is required"
+}
+
+# list_get <key> -> one entry per line (common + hosts.<host>, no duplicates)
+list_get() {
+    jq -r --arg h "$host" --arg k "$1" '
+        ((.common[$k] // []) + ((.hosts[$h] // {})[$k] // []))
+        | unique[]' "$file"
+}
+
+cmd_init() {
+    if [ -f "$file" ]; then
+        die "$file already exists; refusing to overwrite"
+    fi
+    mkdir -p "$(dirname "$file")"
+
+    cat >"$file" <<EOF
+{
+  "common": {
+    "packages": [],
+    "kargs": [],
+    "copr": [],
+    "flatpaks": [],
+    "units": []
+  },
+  "hosts": {}
+}
+EOF
+
+    if [ ! -d "$(dirname "$file")/.git" ]; then
+        git -C "$(dirname "$file")" init -q
+    fi
+
+    echo "initialized $file"
+    echo "next: 'ujust machine-export' to seed it from this machine, or edit it by hand"
+}
+
+cmd_status() {
+    require_manifest
+    local rc=0 pkg arg app unit repo
+
+    while IFS= read -r pkg; do
+        [ -n "$pkg" ] || continue
+        if ! rpm -q "$pkg" >/dev/null 2>&1; then
+            echo "missing-package  $pkg"
+            rc=1
+        fi
+    done < <(list_get packages)
+
+    while IFS= read -r arg; do
+        [ -n "$arg" ] || continue
+        if ! grep -qw -- "$arg" /proc/cmdline; then
+            echo "missing-karg     $arg"
+            rc=1
+        fi
+    done < <(list_get kargs)
+
+    while IFS= read -r repo; do
+        [ -n "$repo" ] || continue
+        if ! copr_enabled "$repo"; then
+            echo "missing-copr     $repo"
+            rc=1
+        fi
+    done < <(list_get copr)
+
+    while IFS= read -r app; do
+        [ -n "$app" ] || continue
+        if ! flatpak list --user --app --columns=application 2>/dev/null | grep -qx "$app"; then
+            echo "missing-flatpak  $app"
+            rc=1
+        fi
+    done < <(list_get flatpaks)
+
+    while IFS= read -r unit; do
+        [ -n "$unit" ] || continue
+        if ! systemctl --user is-enabled --quiet "$unit" 2>/dev/null; then
+            echo "disabled-unit    $unit"
+            rc=1
+        fi
+    done < <(list_get units)
+
+    if [ "$rc" = 0 ]; then
+        echo "machine manifest is applied"
+    else
+        echo "drift detected: run 'ujust machine-apply'"
+    fi
+}
+
+copr_enabled() {
+    local id="$1"
+    grep -rqs "copr.fedorainfracloud.org:${id%%/*}:${id##*/}" /etc/yum.repos.d/ 2>/dev/null
+}
+
+cmd_apply() {
+    require_manifest
+    local sudo=""
+    [ "$(id -u)" -eq 0 ] || sudo="sudo"
+    local changed=0 reboot=0
+
+    run() {
+        if [ "$dry_run" = 1 ]; then
+            echo "would run: $*"
+        else
+            "$@"
+        fi
+    }
+
+    local repo owner_project
+    while IFS= read -r owner_project; do
+        [ -n "$owner_project" ] || continue
+        if copr_enabled "$owner_project"; then
+            continue
+        fi
+        run $sudo dnf copr enable -y "$owner_project"
+        changed=1
+    done < <(list_get copr)
+
+    local pkg
+    local -a missing=()
+    while IFS= read -r pkg; do
+        [ -n "$pkg" ] || continue
+        rpm -q "$pkg" >/dev/null 2>&1 || missing+=("$pkg")
+    done < <(list_get packages)
+    if [ "${#missing[@]}" -gt 0 ]; then
+        run $sudo rpm-ostree install --idempotent -y "${missing[@]}"
+        changed=1
+        reboot=1
+    fi
+
+    local arg
+    while IFS= read -r arg; do
+        [ -n "$arg" ] || continue
+        if grep -qw -- "$arg" /proc/cmdline; then
+            continue
+        fi
+        run $sudo rpm-ostree kargs --append-if-missing="$arg"
+        changed=1
+        reboot=1
+    done < <(list_get kargs)
+
+    local app
+    while IFS= read -r app; do
+        [ -n "$app" ] || continue
+        if flatpak list --user --app --columns=application 2>/dev/null | grep -qx "$app"; then
+            continue
+        fi
+        run flatpak install --user -y --noninteractive "$app"
+        changed=1
+    done < <(list_get flatpaks)
+
+    local unit
+    while IFS= read -r unit; do
+        [ -n "$unit" ] || continue
+        if systemctl --user is-enabled --quiet "$unit" 2>/dev/null; then
+            continue
+        fi
+        run systemctl --user enable --now "$unit"
+        changed=1
+    done < <(list_get units)
+
+    [ "$changed" = 1 ] || echo "already up to date"
+    if [ "$reboot" = 1 ] && [ "$dry_run" != 1 ]; then
+        echo
+        echo "rpm-ostree changed this deployment; reboot to apply it:"
+        echo "  systemctl reboot"
+    fi
+}
+
+cmd_export() {
+    require_manifest
+    local tmp
+    tmp="$(mktemp)"
+    trap 'rm -f "$tmp"' EXIT
+
+    local -a pkgs=() coprs=() apps=() units=()
+    local line
+
+    while IFS= read -r line; do
+        if [ -n "$line" ]; then
+            pkgs+=("$line")
+        fi
+    done < <(rpm-ostree status --json |
+        jq -r '.deployments[0] | (."requested-packages" // .packages // [])[]' | sort -u)
+
+    while IFS= read -r line; do
+        if [ -n "$line" ]; then
+            coprs+=("$line")
+        fi
+    done < <(grep -rhs '^\[copr:copr\.fedorainfracloud\.org:' /etc/yum.repos.d/ |
+        sed 's/^\[copr:copr\.fedorainfracloud\.org:\([^:]*\):\([^]]*\)\]$/\1\/\2/' | sort -u)
+
+    while IFS= read -r line; do
+        if [ -n "$line" ]; then
+            apps+=("$line")
+        fi
+    done < <(flatpak list --app --columns=application 2>/dev/null | sort -u)
+
+    while IFS= read -r line; do
+        if [ -n "$line" ]; then
+            units+=("$line")
+        fi
+    done < <(systemctl --user list-unit-files --state=enabled --no-legend --plain 2>/dev/null |
+        awk '{ print $1 }' | sort -u)
+
+    local kargs
+    kargs="$(jq -c --arg h "$host" '(.hosts[$h].kargs // [])' "$file" 2>/dev/null || echo '[]')"
+
+    jq --arg h "$host" \
+        --argjson packages "$(printf '%s\n' "${pkgs[@]}" | jq -R -s 'split("\n") | map(select(length > 0))')" \
+        --argjson copr "$(printf '%s\n' "${coprs[@]}" | jq -R -s 'split("\n") | map(select(length > 0))')" \
+        --argjson flatpaks "$(printf '%s\n' "${apps[@]}" | jq -R -s 'split("\n") | map(select(length > 0))')" \
+        --argjson units "$(printf '%s\n' "${units[@]}" | jq -R -s 'split("\n") | map(select(length > 0))')" \
+        --argjson kargs "$kargs" \
+        '.hosts[$h] = ((.hosts[$h] // {}) + {
+            packages: $packages,
+            kargs: $kargs,
+            copr: $copr,
+            flatpaks: $flatpaks,
+            units: $units
+        })' "$file" >"$tmp"
+
+    mv "$tmp" "$file"
+    trap - EXIT
+    echo "updated hosts.$host in $file"
+    echo "review the diff: the list includes image-provided Flatpaks and units"
+}
+
+action=""
+for arg in "$@"; do
+    case "$arg" in
+        init | status | apply | export) action="$arg" ;;
+        --dry-run) dry_run=1 ;;
+        -h | --help) usage; exit 0 ;;
+        *) usage >&2; exit 2 ;;
+    esac
+done
+
+case "$action" in
+    init) cmd_init ;;
+    status) cmd_status ;;
+    apply) cmd_apply ;;
+    export) cmd_export ;;
+    *) usage >&2; exit 2 ;;
+esac

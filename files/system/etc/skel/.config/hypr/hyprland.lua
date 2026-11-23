@@ -4,14 +4,17 @@
 -- デフォルトレイアウトは標準 dwindle。カスタムレイアウト quadgrid (layouts/quadgrid.lua)
 -- は登録のみ行い、適用は workspace_rule に委ねる。
 --
--- 固有設定 (machine-specific): このファイルは既定動作 (モニタ自動検出など) を
--- そのまま提供する。実機固有の設定が必要な場合は ~/.config/hypr/local.conf を用意する。
---   例) return { monitor_primary = "DP-1" }  → テーブルを返して変数を上書き
---       hl.monitor({ output = "HDMI-A-1", ... }) / hl.window_rule(...) / hl.bind(...)
---       → ファイル内で直接実行してモニタ / ワークスペースルール / キーバインドを追加
--- local.conf は /etc/skel に同梱しない (overwrite=1 同期で上書きされないよう)。
+-- このファイルはイメージ (SKEL) の既定値。ユーザー設定は末尾で読み込む:
+--   ~/.config/hypr/workspaces.lua     (任意) ワークスペース割当
+--   ~/.config/hypr/dms/*.lua          (DMS が生成) outputs / colors / windowrules
+--   ~/.config/hypr/sunshine.lua       (SKEL) Sunshine ストリーミング用レイアウト
+--   ~/.config/hypr/host.lua           (任意) マシン固有
+--   ~/.config/hypr/user.lua           (任意) 最後に読み込み、何でも上書きできる
+--   ~/.config/hypr/local.conf         (旧形式) return { monitor_primary = "DP-1" }
+-- local.conf / user.lua / host.lua / workspaces.lua は /etc/skel に同梱しない
+-- (sync-skel-config の overwrite=1 同期で上書きされないよう)。
 
--- Monitor - auto detect (local.conf で上書き可能)
+-- Monitor - auto detect (host.lua / user.lua で上書き可能)
 hl.monitor({
     output   = "",
     mode     = "preferred",
@@ -21,8 +24,8 @@ hl.monitor({
 
 -- Variables
 local terminal    = "ghostty"
-local fileManager = "nemo"
-local menu        = "hyprtomic-gui-shell ipc call launcher toggle"
+local fileManager = "dfiles"
+local menu        = "dms ipc call launcher toggle"
 local mainMod     = "SUPER"
 
 -- Machine-specific overrides: ~/.config/hypr/local.conf (loaded when present).
@@ -31,6 +34,17 @@ local function _exists(p)
     local f = io.open(p, "r")
     if f then io.close(f); return true end
     return false
+end
+-- Load a Lua fragment if it exists; report failures as a notification instead
+-- of aborting the whole config.
+local function _dofile(path)
+    if not _exists(path) then
+        return
+    end
+    local ok = pcall(dofile, path)
+    if not ok then
+        hl.notification.create({ text = "hypr: failed to load " .. path, duration = 5000 })
+    end
 end
 local localCfg = {}
 if _exists(_HOME .. "/.config/hypr/local.conf") then
@@ -41,8 +55,17 @@ if _exists(_HOME .. "/.config/hypr/local.conf") then
         hl.notification.create({ text = "hypr: ~/.config/hypr/local.conf failed to load; using defaults", duration = 5000 })
     end
 end
--- Empty = no monitor pinning (the pfmon/btop rule stays on the current monitor).
+-- Empty = no monitor pinning. A legacy local.conf `monitor_primary` still
+-- pins that output; new configs should set monitors in host.lua/user.lua.
 local monitorPrimary = localCfg.monitor_primary or ""
+if monitorPrimary ~= "" then
+    hl.monitor({
+        output   = monitorPrimary,
+        mode     = "preferred",
+        position = "auto",
+        scale    = 1.0,
+    })
+end
 
 -- カスタムレイアウト登録 (適用は local.conf の workspace_rule で指定。
 -- ~/.config/hypr/layouts が無い場合は skip)
@@ -59,29 +82,28 @@ hl.env("XCURSOR_SIZE", "36")
 hl.env("XDG_CURRENT_DESKTOP", "Hyprland")
 hl.env("XDG_SESSION_TYPE", "wayland")
 hl.env("XDG_SESSION_DESKTOP", "Hyprland")
--- IME: fcitx5 runs inside the GUI container, but the container shares the
--- host session bus, so host GTK/Qt apps reach it through these variables.
+-- IME: fcitx5 + Mozkey run on the host (the image ships them), so GTK/Qt apps
+-- reach the IME through these variables.
 hl.env("GTK_IM_MODULE", "fcitx")
 hl.env("QT_IM_MODULE", "fcitx")
 hl.env("XMODIFIERS", "@im=fcitx")
 hl.env("INPUT_METHOD", "fcitx")
 
 -- Autostart
--- The bar / launcher / control-center / notifications / powermenu / OSD are
--- quickshell, running in the Arch GUI container and started by
--- hyprtomic-gui-shell. IME (fcitx5) and the clipboard daemon (clipse) also
--- run inside the container (see hyprtomic-gui-session).
+-- DMS (bar / launcher / control center / notifications / power menu / OSD)
+-- runs as the dms.service user unit, bound to hyprland-session.target by the
+-- image. Start the target after exporting the environment so DMS can see
+-- WAYLAND_DISPLAY. IME (fcitx5) starts from its XDG autostart entry.
 hl.on("hyprland.start", function()
     hl.exec_cmd("dbus-update-activation-environment --systemd --all")
+    hl.exec_cmd("/usr/libexec/hyprtomic/seed-dms-wallpaper")
+    hl.exec_cmd("systemctl --user start graphical-session.target")
+    hl.exec_cmd("systemctl --user start hyprland-session.target")
     hl.exec_cmd("hyprpolkitagent")
     hl.exec_cmd("systemctl --user import-environment QT_QPA_PLATFORMTHEME GTK_IM_MODULE QT_IM_MODULE XMODIFIERS")
     hl.exec_cmd("hypridle")
     hl.exec_cmd("gnome-keyring-daemon --start --components=secrets,pkcs11,ssh")
-    hl.exec_cmd("swaybg -i $HOME/.local/share/backgrounds/wallpaper.jpg -m fill")
     hl.exec_cmd("hyprctl setcursor Bibata-Modern-Classic 36")
-    -- GUI shell (quickshell) in the Arch container. Manages the container via
-    -- `ujust gui-container-*`; blocks while the session runs.
-    hl.exec_cmd("hyprtomic-gui-shell")
     hl.exec_cmd("sleep 2 && dbus-update-activation-environment --systemd DISPLAY WAYLAND_DISPLAY XDG_CURRENT_DESKTOP")
 end)
 
@@ -207,7 +229,7 @@ hl.animation({ leaf = "workspacesIn",  enabled = true, speed = 1.21, bezier = "a
 hl.animation({ leaf = "workspacesOut", enabled = true, speed = 1.94, bezier = "almostLinear", style = "fade" })
 
 -- Keybindings
-hl.bind(mainMod .. " + S", hl.dsp.exec_cmd("hyprbind"), { desc = "キーバインドを確認" })
+hl.bind(mainMod .. " + S", hl.dsp.exec_cmd("dms ipc call keybinds toggle hyprland"), { desc = "キーバインドを確認" })
 hl.bind(mainMod .. " + Q", hl.dsp.exec_cmd(terminal), { desc = "ターミナルを開く (単体)" })
 hl.bind(mainMod .. " + X", hl.dsp.window.close(), { desc = "アクティブウィンドウを閉じる" })
 hl.bind(mainMod .. " + E", hl.dsp.exec_cmd(fileManager), { desc = "ファイルマネージャを開く" })
@@ -237,8 +259,7 @@ hl.bind(mainMod .. " + P", hl.dsp.window.pseudo(), { desc = "Pseudo モード切
 hl.bind(mainMod .. " + J", hl.dsp.layout("togglesplit"), { desc = "スプリット方向切り替え (dwindle)" })
 hl.bind(mainMod .. " + L", hl.dsp.exec_cmd("hyprlock"), { desc = "画面ロック" })
 hl.bind(mainMod .. " + C", hl.dsp.exec_cmd("flatpak run org.mozilla.firefox"), { desc = "Firefox を開く" })
--- pfmon の代わりに btop を GUI コンテナ内で起動
-hl.bind(mainMod .. " + M", hl.dsp.exec_cmd("ghostty --class=local.pfmon -e distrobox enter hyprtomic-gui -- btop"), { desc = "btop パフォーマンスモニタ" })
+hl.bind(mainMod .. " + M", hl.dsp.exec_cmd("dms ipc call processlist open"), { desc = "プロセス / パフォーマンス" })
 hl.bind(mainMod .. " + B", hl.dsp.exec_cmd("flatpak run com.bitwarden.desktop"), { desc = "Bitwarden を開く" })
 
 -- Focus
@@ -261,15 +282,14 @@ hl.bind(mainMod .. " + SHIFT + down",  moveWindowAction("down"),  { desc = "ウ�
 
 -- Utilities
 hl.bind(mainMod .. " + Escape", hl.dsp.exec_cmd("rofi -show window"), { desc = "ウィンドウスイッチャ (rofi)" })
-hl.bind(mainMod .. " + SHIFT + S",
-    hl.dsp.exec_cmd([[mkdir -p "$HOME/Pictures/Screenshots" && FILE="$HOME/Pictures/Screenshots/$(date +%Y-%m-%d_%H-%M-%S).png" && grim -g "$(slurp)" "$FILE" && wl-copy --type image/png < "$FILE"]]),
-    { desc = "領域スクリーンショットをコピーして保存" })
-hl.bind(mainMod .. " + CTRL + SHIFT + S",
-    hl.dsp.exec_cmd([[mkdir -p "$HOME/Pictures/Screenshots" && grim -g "$(slurp)" "$HOME/Pictures/Screenshots/$(date +%Y-%m-%d_%H-%M-%S).png"]]),
-    { desc = "領域スクリーンショットを保存" })
-hl.bind(mainMod .. " + SHIFT + P", hl.dsp.exec_cmd("hyprpicker -a -f hex"), { desc = "カラーピッカー" })
-hl.bind(mainMod .. " + DELETE", hl.dsp.exec_cmd("hyprtomic-gui-shell ipc call powermenu toggle"), { desc = "電源メニュー" })
-hl.bind(mainMod .. " + A", hl.dsp.exec_cmd("hyprtomic-gui-shell ipc call controlcenter toggle"), { desc = "コントロールセンター" })
+hl.bind(mainMod .. " + SHIFT + S", hl.dsp.exec_cmd("dms screenshot"),
+    { desc = "領域スクリーンショット (保存 + コピー)" })
+hl.bind(mainMod .. " + CTRL + SHIFT + S", hl.dsp.exec_cmd("dms screenshot --no-clipboard"),
+    { desc = "領域スクリーンショット (保存のみ)" })
+hl.bind(mainMod .. " + SHIFT + P", hl.dsp.exec_cmd("dms color pick"), { desc = "カラーピッカー" })
+hl.bind(mainMod .. " + DELETE", hl.dsp.exec_cmd("dms ipc call powermenu toggle"), { desc = "電源メニュー" })
+hl.bind(mainMod .. " + A", hl.dsp.exec_cmd("dms ipc call control-center toggle"), { desc = "コントロールセンター" })
+hl.bind(mainMod .. " + V", hl.dsp.exec_cmd("dms ipc call clipboard toggle"), { desc = "クリップボード履歴" })
 
 -- Ghostty ネイティブタブを使用 (Ctrl+Shift+T/Q/←/→ は Ghostty が処理)
 
@@ -326,14 +346,10 @@ hl.bind("XF86AudioPause", hl.dsp.exec_cmd("playerctl play-pause"), { locked = tr
 hl.bind("XF86AudioPlay",  hl.dsp.exec_cmd("playerctl play-pause"), { locked = true, desc = "再生/一時停止" })
 hl.bind("XF86AudioPrev",  hl.dsp.exec_cmd("playerctl previous"),   { locked = true, desc = "前の曲" })
 
--- Regular bindings
-hl.bind(mainMod .. " + V",      hl.dsp.exec_cmd("clipse-gui"),  { desc = "クリップボード履歴" })
-hl.bind(mainMod .. " + period", hl.dsp.exec_cmd("hypremoji"),   { desc = "絵文字ピッカー" })
-
 -- Window rules
 hl.window_rule({
     name    = "opacity-apps",
-    match   = { class = "^(google-chrome|nemo|org.pulseaudio.pavucontrol|nm-connection-editor|blueman-manager|Blueman-manager|nwg-look|org.gnome.FileRoller|org.fcitx.fcitx5-config-qt)$" },
+    match   = { class = "^(google-chrome|dev\\.duxlabs\\.files|org.pulseaudio.pavucontrol|nm-connection-editor|blueman-manager|Blueman-manager|org.gnome.FileRoller|org.fcitx.fcitx5-config-qt)$" },
     opacity = 0.925,
 })
 
@@ -347,14 +363,6 @@ hl.window_rule({
     name  = "float-utils",
     match = { class = "^(authentication-agent|Rustdesk|org.pulseaudio.pavucontrol|nm-connection-editor|blueman-manager|Blueman-manager)$" },
     float = true,
-})
-
-hl.window_rule({
-    name    = "float-pickers",
-    match   = { class = "^(dev\\.musagy\\.hypremoji|clipse-gui)$" },
-    float   = true,
-    center  = true,
-    opacity = 0.9,
 })
 
 hl.window_rule({
@@ -412,31 +420,6 @@ hl.window_rule({
     opacity = 0.85,
 })
 
-local pfmonRule = {
-    name        = "float-pfmon",
-    match       = { class = "^local\\.pfmon$" },
-    float       = true,
-    size        = "1360 765",
-    center      = true,
-    no_anim     = true,
-    border_size = 1,
-    rounding    = 6,
-}
--- Pin the monitor only when local.conf sets monitor_primary (default: auto).
-if monitorPrimary ~= "" then
-    pfmonRule.monitor = monitorPrimary
-end
-hl.window_rule(pfmonRule)
-
-hl.window_rule({
-    name    = "float-hyprbind",
-    match   = { initial_title = "^HyprBind$" },
-    float   = true,
-    size    = "(monitor_w*0.5) (monitor_h*0.6)",
-    center  = true,
-    opacity = 0.85,
-})
-
 hl.window_rule({
     name           = "pip-float",
     match          = { title = "^(Picture-in-Picture|ピクチャー イン ピクチャー)$" },
@@ -459,11 +442,28 @@ hl.window_rule({
     float = true,
 })
 
--- Layer rules
-hl.layer_rule({ name = "powermenu",          match = { namespace = "quickshell:powermenu" },      blur = false, ignore_alpha = 0.5 })
-hl.layer_rule({ name = "controlcenter",      match = { namespace = "quickshell:controlcenter" },  blur = true,  ignore_alpha = 0.5 })
-hl.layer_rule({ name = "notifications",      match = { namespace = "quickshell:notifications" },  blur = false, ignore_alpha = 0.5 })
-hl.layer_rule({ name = "shelf",              match = { namespace = "quickshell:shelf" },          blur = true,  ignore_alpha = 0.5 })
-hl.layer_rule({ name = "launcher",           match = { namespace = "quickshell:launcher" },       blur = false, ignore_alpha = 0.5 })
-hl.layer_rule({ name = "volume-osd",         match = { namespace = "quickshell:volume-osd" },     blur = false, ignore_alpha = 0.5 })
-hl.layer_rule({ name = "rofi",               match = { namespace = "rofi" },                      blur = true,  ignore_alpha = 0.2 })
+-- Layer rules (DMS namespaces: https://duxlabs.dev/docs/dms/layers)
+hl.layer_rule({ name = "bar",                       match = { namespace = "dms:bar" },                      blur = true,  ignore_alpha = 0.5 })
+hl.layer_rule({ name = "control-center",            match = { namespace = "dms:control-center" },           blur = true,  ignore_alpha = 0.5 })
+hl.layer_rule({ name = "notification-popup",        match = { namespace = "dms:notification-popup" },       blur = false, ignore_alpha = 0.5 })
+hl.layer_rule({ name = "notification-center",       match = { namespace = "dms:notification-center-popout" }, blur = true, ignore_alpha = 0.5 })
+hl.layer_rule({ name = "notification-modal",        match = { namespace = "dms:notification-center-modal" }, blur = false, ignore_alpha = 0.5 })
+hl.layer_rule({ name = "spotlight",                 match = { namespace = "dms:spotlight" },                blur = false, ignore_alpha = 0.5 })
+hl.layer_rule({ name = "dash",                      match = { namespace = "dms:dash" },                     blur = true,  ignore_alpha = 0.5 })
+hl.layer_rule({ name = "clipboard",                 match = { namespace = "dms:clipboard" },                blur = true,  ignore_alpha = 0.5 })
+hl.layer_rule({ name = "settings",                  match = { namespace = "dms:settings" },                 blur = false, ignore_alpha = 0.5 })
+hl.layer_rule({ name = "power-menu",                match = { namespace = "dms:power-menu" },               blur = false, ignore_alpha = 0.5 })
+hl.layer_rule({ name = "osd",                       match = { namespace = "dms:osd" },                      blur = false, ignore_alpha = 0.5 })
+hl.layer_rule({ name = "tooltip",                   match = { namespace = "dms:tooltip" },                  blur = false, ignore_alpha = 0.5 })
+hl.layer_rule({ name = "rofi",                      match = { namespace = "rofi" },                         blur = true,  ignore_alpha = 0.2 })
+
+-- User / machine / DMS fragments, loaded last so they can override anything
+-- above. DMS regenerates its own files; only host.lua / user.lua / local.conf
+-- are meant to be edited (and git-managed).
+_dofile(_HOME .. "/.config/hypr/workspaces.lua")
+_dofile(_HOME .. "/.config/hypr/dms/outputs.lua")
+_dofile(_HOME .. "/.config/hypr/dms/colors.lua")
+_dofile(_HOME .. "/.config/hypr/dms/windowrules.lua")
+_dofile(_HOME .. "/.config/hypr/sunshine.lua")
+_dofile(_HOME .. "/.config/hypr/host.lua")
+_dofile(_HOME .. "/.config/hypr/user.lua")

@@ -1,7 +1,7 @@
 /*
  * GTK4 named-color overrides for the default md3-cobalt-night palette.
- * Keep in sync with ~/.config/quickshell/ii/Theme.qml and
- * ~/.config/quickshell/ii/scripts/apply-theme.sh (regenerates this on theme switch).
+ * DMS + matugen regenerate this file when the wallpaper changes; this static
+ * copy is the pre-theming fallback.
  */
 
 @define-color accent_color #9BBDE8;

@@ -1,24 +1,31 @@
 # fedora-hyprtomic &nbsp; [![bluebuild build badge](https://github.com/j7b3y/fedora-hyprtomic/actions/workflows/build.yml/badge.svg)](https://github.com/j7b3y/fedora-hyprtomic/actions/workflows/build.yml)
 
-A personal Fedora Atomic (wayblue) desktop image with a split architecture:
+A personal Fedora Atomic (wayblue) desktop image built around **DMS (Dux
+Modular Shell)**, with the GUI stack running natively on the host instead of in
+an Arch distrobox container.
 
-- **Host** — Fedora Atomic base + Hyprland/SDDM session, system services and CLI tools.
-- **GUI container** — an Arch distrobox image (`ghcr.io/j7b3y/hyprtomic-gui`) that carries the GUI foundation (quickshell, Qt6) and the GUI apps, started from the host by `hyprtomic-gui-shell`.
-- **Dotfiles** — baked into `/etc/skel` and synced into `$HOME` with a ujust recipe (`$HOME` is shared with the container).
+- **Host** — Fedora Atomic base, Hyprland/SDDM, DMS + quickshell, fcitx5 +
+  Mozkey IbG, dfiles, and a JIS-patched Sunshine build.
+- **SKEL** — environment defaults baked into `/etc/skel` and synced into
+  `$HOME` with `ujust sync-skel-config`.
+- **USR** — the user's own git repository, symlinked into `$HOME` with
+  `ujust user-config-apply` (see `docs/design/`).
+- **HOST** — machine-specific rpm-ostree state (layered packages, kargs, COPRs)
+  in a separate manifest, applied with `ujust machine-apply`.
 
-> This branch is the **base scaffold**: system, container pipeline and sync
-> mechanism only. The dotfiles (Hyprland config, shell config, app configs) are
-> added on top; see [`AGENTS.md`](AGENTS.md) for the integration contract.
+The old Arch GUI container is no longer used. Its files are kept only until the
+New Order image has been validated, then removed.
 
 ## Repository layout
 
 | Path | Purpose |
 |---|---|
-| `recipes/recipe.yml` | Host image (packages, firstboot services, default flatpaks) |
-| `recipes/gui.yml` | GUI container image (package layers + session assets) |
-| `files/system/**` | Host-side files copied to `/` (skel, systemd, `hyprtomic-gui-shell`, ujust) |
-| `files/scripts/**` | Host build-time scripts |
-| `files/gui-build/**`, `files/gui/**` | GUI container build scripts and container-side assets |
+| `recipes/recipe.yml` | Host image (packages, COPRs, firstboot services, default flatpaks) |
+| `files/system/**` | Files copied to `/` (skel, systemd units, PAM, SDDM theme overlay, ujust) |
+| `files/scripts/**` | Build-time scripts (Mozkey RPM, Sunshine source build, SDDM theme, finalize) |
+| `scripts/check.sh` | Linux/WSL checks that do not need a container build |
+| `docs/design/**` | Layer/design decisions (tracked) |
+| `recipes/gui.yml`, `files/gui*/**` | **Deprecated** GUI container (pending removal) |
 | `AGENTS.md` | Architecture notes, conventions and change rules |
 
 ## Installation
@@ -42,25 +49,62 @@ To rebase an existing atomic Fedora installation to the latest build:
   ```
 - Reboot again to complete the installation.
 
-## First boot / dotfiles
+## First boot
 
 ```bash
 ujust sync-skel-config                # copy /etc/skel into $HOME (skips existing files)
 ujust overwrite=1 sync-skel-config    # replace managed files, prune removed ones, then re-login
 ```
 
-The GUI container is managed from the host:
+The SKEL layer never touches files owned by the user repository
+(`~/.config/hypr/user.lua`, `workspaces.lua`, `host.lua`, `local.conf`, and
+anything under `~/.config/hyprtomic-user/home/`).
+
+## User configuration (USR)
 
 ```bash
-ujust gui-container-setup             # create + initialize the container
-ujust gui-container-update            # recreate from the latest image
-ujust gui-container-status            # show container state
-hyprtomic-gui-shell status            # same, via the CLI
+ujust user-config-init                # create ~/.config/hyprtomic-user (git repo)
+ujust user-config-apply               # symlink home/ into $HOME
+ujust user-config-status              # check for drift
+ujust prune=1 user-config-apply       # drop links the repository removed
+ujust user-config-update              # git pull --ff-only, then apply
 ```
 
-The container shell session starts when the dotfiles' Hyprland config runs
-`hyprtomic-gui-shell` (see `AGENTS.md`). Session logs:
-`~/.local/state/hyprtomic/gui-session.log`.
+## Machine state (HOST)
+
+The rpm-ostree layer lives in a separate manifest
+(`~/.config/hyprtomic-machine/machine.json`):
+
+```bash
+ujust machine-init                    # create an empty manifest (git init)
+ujust machine-export                  # seed it from this machine
+ujust machine-apply                   # COPRs, packages, kargs, Flatpaks, user units
+ujust dry_run=1 machine-apply         # preview
+```
+
+Packages and kernel arguments are only ever **added**; removal stays manual.
+
+## Sunshine streaming
+
+Sunshine is built from the pinned upstream release with the JIS key patches and
+is started manually (it is not enabled at login):
+
+```bash
+sunshine-session start                # HEADLESS-1 1080p60 + Sunshine unit
+sunshine-session status
+sunshine-session stop                 # stop and restore DMS' monitor layout
+```
+
+The streaming layout lives in `~/.config/hypr/sunshine.lua`; machine-specific
+rules belong in `~/.config/hypr/host.lua`.
+
+## Checks
+
+```bash
+bash scripts/check.sh                 # CRLF, YAML, shellcheck, Python, Lua, just
+```
+
+The same script runs in the `lint` GitHub Actions workflow.
 
 ## Verification
 

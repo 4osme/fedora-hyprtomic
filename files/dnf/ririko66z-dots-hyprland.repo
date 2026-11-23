@@ -3,6 +3,10 @@ name=Copr repo for dots-hyprland owned by ririko66z
 baseurl=https://download.copr.fedorainfracloud.org/results/ririko66z/dots-hyprland/fedora-$releasever-$basearch/
 type=rpm-md
 skip_if_unavailable=True
+# This COPR is enabled only for the Bibata cursor and JetBrains Mono NF fonts.
+# It also builds quickshell-git and a Material Symbols font, which would shadow
+# the duxlabs/dux-repo builds DMS is tested against; keep them out.
+excludepkgs=quickshell-git,google-material-symbols-vf-fonts,hyprland-qt-support
 gpgcheck=1
 gpgkey=https://download.copr.fedorainfracloud.org/results/ririko66z/dots-hyprland/pubkey.gpg
 repo_gpgcheck=0

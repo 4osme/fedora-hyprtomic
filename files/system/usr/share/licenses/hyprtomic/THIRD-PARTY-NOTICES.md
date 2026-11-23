@@ -8,32 +8,28 @@ This image adapts work from other projects. Each retains its own license.
 |---|---|---|
 | [oameye/atomic-hyprland](https://github.com/oameye/atomic-hyprland) | (per upstream repo) | The `sync-skel-config` ujust design (`/etc/skel` + rsync, `overwrite=1` manifest replace & prune) in `files/system/usr/share/ublue-os/just/60-custom.just` |
 
-## Tools shipped by the image (built/downloaded at build time)
+## Packages installed from Fedora / COPR
 
-These are built by `files/scripts/install-*.sh` / `files/gui-build/scripts/gui-*.sh`
-and shipped as packages or binaries; all rights remain with the upstream authors.
+These are installed as RPMs by `recipes/recipe.yml`; all rights remain with the
+upstream authors. See the package metadata for the exact license of each.
 
-| Source | License | Tool |
+| Source | License | Used for |
 |---|---|---|
-| [Keyitdev/sddm-astronaut-theme](https://github.com/Keyitdev/sddm-astronaut-theme) | GPL-3.0 | SDDM login theme |
-| ghostty (copr `scottames/ghostty`) | per upstream | host terminal |
-| [ry2x/HyprBind](https://github.com/ry2x/HyprBind) | MIT | keybind list app (GUI container) |
-| [oneroa/hypr-emoji-picker](https://github.com/oneroa/hypr-emoji-picker) (AUR `hypremoji`) | MIT | emoji picker (GUI container) |
-| mozkey-ibg-bin (AUR) | per upstream | Japanese IME engine (GUI container) |
-| fcitx5, quickshell-git and the remaining Arch packages | per upstream | GUI foundation (GUI container) |
-| Google Sans Flex (copr `ririko66z/dots-hyprland`) | OFL-1.1 | optional UI font (GUI container) |
-
-Dotfiles that are synced from `/etc/skel` are added per-branch by their authors;
-anything vendored there must ship its own license alongside it.
+| [Keyitdev/sddm-astronaut-theme](https://github.com/Keyitdev/sddm-astronaut-theme) | GPL-3.0 | SDDM login theme (pinned revision + HyprTomic overlay) |
+| [LizardByte/Sunshine](https://github.com/LizardByte/Sunshine) + HyprTomic JIS patches | GPL-3.0-or-later (Sunshine), MIT (libvirtualhid backend) | game streaming host, built from source with the JIS key patches |
+| [Dux Modular Shell](https://github.com/duxlabs-dev/dux-shell) (`duxlabs/dms`, `duxlabs/dux-repo`) | MIT | shell, quickshell, matugen, dgop, dsearch, dcal, dfiles |
+| [Mozkey IbG](https://github.com/kazormia296/mozkey-ibg) (Fedora RPM) | BSD-3-Clause AND Apache-2.0 AND LGPL-2.1-or-later AND MIT | Japanese IME engine (fcitx5) |
+| ghostty (`duxlabs/dux-repo`) | per upstream | terminal |
+| Bibata cursor theme, JetBrains Mono NF fonts (`ririko66z/dots-hyprland`) | per upstream | cursor / terminal font |
+| Papirus, adw-gtk3, Noto, Roboto Flex and the remaining Fedora packages | per upstream | desktop foundation |
 
 ## Dotfiles vendored into `/etc/skel`
 
 | Path in `/etc/skel` | Source | License |
 |---|---|---|
-| `.config/quickshell/ii/` and `.config/hypr/` (hyprland.lua, hyprlock, hypridle, quadgrid.lua, scripts) | the user's own dotfiles (ported from the Arch `dotfiles` repo) | none (self-authored) |
-| `.config/Kvantum/catppuccin-mocha-blue/` | [catppuccin/kvantum](https://github.com/catppuccin/kvantum) theme "catppuccin-mocha-blue" | GPL-3.0 (see `catppuccin-kvantum-LICENSE.txt`) |
+| `.config/hypr/` (hyprland.lua, hyprlock, hypridle, quadgrid.lua, scripts) | the user's own dotfiles | none (self-authored) |
 | `.local/share/backgrounds/wallpaper.jpg` | personal asset | none (personal) |
-| `.config/gtk-3.0/gtk.css`, `.config/gtk-4.0/gtk.css` | adapted from the `gui/arch-container` branch's matugen GTK templates | per the original matugen/Base Dotfiles upstream |
+| `.config/gtk-3.0/gtk.css`, `.config/gtk-4.0/gtk.css` | adapted from the previous matugen GTK templates | per the original matugen upstream |
 
 ## Build-time references
 
