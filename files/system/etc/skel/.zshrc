@@ -69,8 +69,9 @@ zstyle ':vcs_info:git:*' stagedstr "%F{magenta}!"
 zstyle ':vcs_info:git:*' unstagedstr "%F{yellow}+"
 zstyle ':vcs_info:*' formats "%F{cyan}%c%u[%b]%f"
 zstyle ':vcs_info:*' actionformats '[%b|%a]'
+_hyprtomic_prompt_host=${CONTAINER_ID:-${(%):-%m}}
 precmd () { vcs_info }
-PROMPT='%F{magenta}%B%n%b%f@%F{blue}%U%m%u%f:%F{green}%1~%f%F{cyan}$vcs_info_msg_0_%f%F{white}$%f '
+PROMPT='%F{magenta}%B%n%b%f@%F{blue}%U${_hyprtomic_prompt_host}%u%f:%F{green}%1~%f%F{cyan}$vcs_info_msg_0_%f%F{white}$%f '
 
 # Key bindings
 bindkey '^[[H'  beginning-of-line
