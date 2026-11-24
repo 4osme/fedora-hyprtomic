@@ -135,6 +135,32 @@ machine-apply:
 machine-export:
     @/usr/libexec/hyprtomic/machine-config export
 
+# --- Distrobox integration ---
+
+# Re-scan running containers now (install/remove of a GUI app, hidden entry,
+# new container). The hyprtomic-distrobox-apps.service user unit does this
+# every 15 seconds automatically.
+refresh-distrobox-apps:
+    @/usr/libexec/hyprtomic/distrobox-apps --once
+
+# Install a package-manager hook inside a container so the host launcher is
+# refreshed immediately after apt/pacman/apk install/remove. The polling
+# watcher covers dnf and every other package manager.
+distrobox-app-hooks container:
+    @/usr/libexec/hyprtomic/distrobox-app-hooks {{ container }}
+
+# Give container apps access to the host system bus (BlueZ / NetworkManager).
+# Needed by Chrome's Bluetooth passkeys and by bluetoothctl inside a container.
+distrobox-host-dbus container:
+    @/usr/libexec/hyprtomic/distrobox-host-dbus {{ container }}
+
+# --- Audio ---
+
+# Set the default output (e.g. `ujust audio-default-sink @DEFAULT_AUDIO_SINK@`
+# or a full node name from `pactl list short sinks`).
+audio-default-sink sink:
+    @pactl set-default-sink "{{ sink }}"
+
 # --- SDDM login screen ---
 
 # Replace the SDDM login-screen wallpaper. Copies the astronaut theme to a

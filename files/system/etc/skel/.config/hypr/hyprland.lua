@@ -261,12 +261,12 @@ hl.bind(mainMod .. " + F", function()
         hl.dispatch(hl.dsp.window.center())
     end
 end, { desc = "フローティング切り替え" })
-hl.bind("Henkan_Mode", hl.dsp.exec_cmd(menu), { desc = "アプリランチャを開く (変換キー)" })
+hl.bind("SUPER + Alt_L", hl.dsp.exec_cmd("dms ipc call widget toggle launcherButton"), { desc = "アプリランチャを開く" })
 hl.bind(mainMod .. " + P", hl.dsp.window.pseudo(), { desc = "Pseudo モード切り替え (dwindle)" })
 hl.bind(mainMod .. " + J", hl.dsp.layout("togglesplit"), { desc = "スプリット方向切り替え (dwindle)" })
 hl.bind(mainMod .. " + L", hl.dsp.exec_cmd("hyprlock"), { desc = "画面ロック" })
 hl.bind(mainMod .. " + C", hl.dsp.exec_cmd("flatpak run org.mozilla.firefox"), { desc = "Firefox を開く" })
-hl.bind(mainMod .. " + M", hl.dsp.exec_cmd("dms ipc call processlist open"), { desc = "プロセス / パフォーマンス" })
+hl.bind(mainMod .. " + M", hl.dsp.exec_cmd("mission-center"), { desc = "プロセス / パフォーマンス" })
 hl.bind(mainMod .. " + B", hl.dsp.exec_cmd("flatpak run com.bitwarden.desktop"), { desc = "Bitwarden を開く" })
 
 -- Focus

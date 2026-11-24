@@ -57,6 +57,17 @@ term = xterm-256color
 confirm-close-surface = false
 mouse-hide-while-typing = true
 
+# Right-click belongs to Ghostty, not to the TUI or the desktop shell.
+# With the default `mouse-reporting = true`, a mouse-capturing TUI
+# (OpenCode / vim / lazygit) receives the right-click and selects part of
+# the line instead of letting Ghostty show its context menu. `false` keeps
+# all mouse events local, so right-click consistently opens the menu below
+# instead of competing with DMS's desktop right-click handler.
+mouse-reporting = false
+right-click-action = context-menu
+# `never` also stops a TUI from overriding shift-selection with XTSHIFTESCAPE.
+mouse-shift-capture = never
+
 # ── Keybinds (タブ管理) ──
 keybind = ctrl+shift+t=new_tab
 keybind = ctrl+shift+q=close_tab:this
@@ -68,3 +79,7 @@ keybind = ctrl+shift+tab=previous_tab
 # ── Keybinds (コピー・ペースト) ──
 keybind = ctrl+shift+c=copy_to_clipboard:mixed
 keybind = ctrl+shift+v=paste_from_clipboard
+
+# Escape hatch: re-enable mouse reporting temporarily for TUIs that need it
+# (lazygit, htop, ...). Press again to restore the local-mouse default.
+keybind = ctrl+shift+m=toggle_mouse_reporting

@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# Install a package-manager hook inside a distrobox container so the host
+# launcher is refreshed immediately after an install/remove transaction.
+# The watcher (hyprtomic-distrobox-apps.service) still picks up changes within
+# 15 seconds even when no hook is installed.
+set -euo pipefail
+
+name="${1:-}"
+[ -n "$name" ] || { echo "usage: distrobox-app-hooks CONTAINER" >&2; exit 2; }
+
+if command -v distrobox-enter >/dev/null 2>&1; then
+    enter=(distrobox-enter -n "$name" --)
+else
+    enter=(distrobox enter "$name" --)
+fi
+
+INNER_SCRIPT=$(cat <<'INNER'
+set -eu
+if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+    as_root() { sudo "$@"; }
+else
+    as_root() { "$@"; }
+fi
+
+if command -v apt-get >/dev/null 2>&1; then
+    as_root mkdir -p /etc/apt/apt.conf.d
+    printf 'DPkg::Post-Invoke { "distrobox-host-exec /usr/libexec/hyprtomic/distrobox-apps --once >/dev/null 2>&1 || true"; };\n' |
+        as_root tee /etc/apt/apt.conf.d/99hyprtomic-apps >/dev/null
+    echo "apt hook installed in ${CONTAINER_ID:-this container}"
+elif command -v pacman >/dev/null 2>&1; then
+    as_root mkdir -p /etc/pacman.d/hooks
+    as_root tee /etc/pacman.d/hooks/99-hyprtomic-apps.hook >/dev/null <<'EOF'
+[Trigger]
+Operation = Install
+Operation = Remove
+Type = Package
+Target = *
+
+[Action]
+Description = Refresh HyprTomic launcher entries
+When = PostTransaction
+Exec = /usr/bin/distrobox-host-exec /usr/libexec/hyprtomic/distrobox-apps --once
+EOF
+    echo "pacman hook installed in ${CONTAINER_ID:-this container}"
+elif command -v apk >/dev/null 2>&1; then
+    as_root mkdir -p /etc/apk/commit_hooks.d
+    as_root tee /etc/apk/commit_hooks.d/99hyprtomic-apps >/dev/null <<'EOF'
+#!/bin/sh
+distrobox-host-exec /usr/libexec/hyprtomic/distrobox-apps --once >/dev/null 2>&1 || true
+EOF
+    as_root chmod +x /etc/apk/commit_hooks.d/99hyprtomic-apps
+    echo "apk hook installed in ${CONTAINER_ID:-this container}"
+else
+    echo "no supported package manager; the watcher will pick up changes within 15s"
+fi
+INNER
+)
+
+"${enter[@]}" sh -lc "$INNER_SCRIPT"

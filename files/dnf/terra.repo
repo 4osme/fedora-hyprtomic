@@ -1,0 +1,13 @@
+[terra]
+name=Terra packages for Fedora $releasever - $basearch
+baseurl=https://repos.fyralabs.com/terra$releasever
+type=rpm-md
+skip_if_unavailable=True
+gpgcheck=1
+gpgkey=https://repos.fyralabs.com/terra$releasever/key.asc
+repo_gpgcheck=0
+enabled=1
+enabled_metadata=1
+# Terra also ships ghostty/matugen; keep this repo scoped to Mission Center so
+# it cannot shadow the versions pulled from duxlabs/dux-repo.
+includepkgs=mission-center

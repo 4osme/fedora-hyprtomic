@@ -54,6 +54,7 @@ modules:
         - duxlabs/dux-repo
       files:
         - ririko66z-dots-hyprland.repo # bibata-cursor-theme, jetbrains-mono-nf-fonts
+        - terra.repo # mission-center (scoped with includepkgs)
     install:
       skip-unavailable: true
       packages:
@@ -162,6 +163,7 @@ modules:
         - gvfs
         - gvfs-mtp
         - gvfs-smb
+        - sshfs # SSH-backed FUSE mounts for remote filesystems
         - udisks2
         - bubblewrap
         - ffmpegthumbnailer
@@ -170,6 +172,10 @@ modules:
 
         # --- Window switcher (DMS does not provide alt-tab)
         - rofi
+
+        # --- System monitor (native GTK4 build from Terra; the Flatpak used to
+        #     need a separate sandbox just to read host processes/sensors)
+        - mission-center
 
         # --- Utilities used by the shell, keybinds and skel configs
         - brightnessctl
@@ -230,6 +236,9 @@ modules:
     user:
       enabled:
         - ydotool.service
+        # Polls running distroboxes for installed/removed GUI apps and keeps
+        # the DMS launcher's .desktop entries in sync.
+        - hyprtomic-distrobox-apps.service
 
   # 6. Default Flatpaks (system scope = auto-provisioned "standard" apps)
   - type: default-flatpaks
