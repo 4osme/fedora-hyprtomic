@@ -117,6 +117,20 @@ GUI apps installed inside a distrobox are registered with the host launcher
 
 ## Audio
 
+Chrome in a minimal Arch distrobox needs `libpulse` inside the container to
+connect to the host's PipeWire PulseAudio socket. The Arch `google-chrome`
+package does not pull it in. From the host, install the client library and
+check the connection (replace `application` with your container name):
+
+```bash
+distrobox enter -n application -- sudo pacman -S --needed libpulse
+distrobox enter -n application -- pactl info
+```
+
+`pactl info` should report `PulseAudio (on PipeWire …)`. Fully quit Chrome
+(including any background processes), then reopen it. Do not start a separate
+PulseAudio or PipeWire server inside the container.
+
 PipeWire/WirePlumber defaults follow the nixos-dotfiles tuning: 48 kHz clock
 with a 2048-sample quantum, no suspend timeout on hardware sinks, and USB audio
 power saving disabled. On `main-desktop` the HDMI-1/LG TV sink can become the
