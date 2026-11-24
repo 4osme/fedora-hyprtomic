@@ -202,7 +202,7 @@
 |---|---|---|---|---|
 | `desktop.nix` | DMS / dcal / dsearch / dux-files / dgop、壁紙 seed | IMG + SKEL | **移設（フルスイート）** | DMS 一式を IMG。session seed は sync ツール |
 | `packages.nix` | ユーザーアプリ一式 | IMG/USR | **分割** | 下記 2.5 |
-| `zsh.nix` | Nix 管理 zsh プラグイン | SKEL | **移設** | Fedora RPM のプラグインへ |
+| `zsh.nix` | Nix 管理 zsh プラグイン | SKEL | **移設** | Antidote を導入したホームでは共有プラグインを使用、未導入時は Fedora RPM にフォールバック |
 | `services.nix` | gnome-keyring / ydotoold | IMG | **移設** | user unit として |
 | `sunshine.nix` | Sunshine user unit | IMG + SKEL | **移設（完了）** | unit は IMG、起動スクリプトと `sunshine.lua` は SKEL |
 | `matugen.nix` | ghostty 用 matugen テンプレート | SKEL | **移設** | パスは sync 時に `$HOME` 展開 |
@@ -213,7 +213,7 @@
 
 | パス | 新レイヤ | 判定 | 備考 |
 |---|---|---|---|
-| `.zshrc` / `.zsh_plugins.txt` / `zshrc.d/shortcuts.zsh` | SKEL/USR | **分割** | 基本は SKEL、個人ショートカットは USR |
+| `.zshrc` / `.zsh_plugins.txt` / `zshrc.d/shortcuts.zsh` | SKEL/USR | **分割** | `.zshrc` と Antidote のプラグイン一覧は SKEL、個人ショートカットは USR |
 | `.config/fastfetch/config.jsonc` | SKEL/USR | **要決定** | 見た目設定 |
 | `.config/fcitx5/classicui.conf` | SKEL | 継続 | |
 | `.config/fontconfig/**` | SKEL | 継続 | |

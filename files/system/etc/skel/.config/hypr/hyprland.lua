@@ -365,6 +365,8 @@ hl.window_rule({
     opacity = 0.925,
 })
 
+
+
 hl.window_rule({
     name    = "opacity-ghostty",
     match   = { class = "^com\\.mitchellh\\.ghostty$" },
@@ -426,6 +428,15 @@ hl.window_rule({
 hl.window_rule({
     name    = "float-missioncenter",
     match   = { class = "io.missioncenter.MissionCenter" },
+    float   = true,
+    size    = "(monitor_w*0.5) (monitor_h*0.6)",
+    center  = true,
+    opacity = 0.85,
+})
+
+hl.window_rule({
+    name    = "float-gtk",
+    match   = { class = "xdg-desktop-portal-gtk" },
     float   = true,
     size    = "(monitor_w*0.5) (monitor_h*0.6)",
     center  = true,

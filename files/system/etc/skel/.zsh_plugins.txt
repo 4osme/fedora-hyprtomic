@@ -1,0 +1,5 @@
+# Add completion functions to fpath before compinit.
+zsh-users/zsh-completions path:src kind:fpath
+zsh-users/zsh-autosuggestions
+# Highlighting must load after compinit and other widget setup.
+zsh-users/zsh-syntax-highlighting kind:defer

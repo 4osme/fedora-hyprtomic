@@ -163,6 +163,7 @@ modules:
         - gvfs
         - gvfs-mtp
         - gvfs-smb
+        - afuse
         - sshfs # SSH-backed FUSE mounts for remote filesystems
         - udisks2
         - bubblewrap
