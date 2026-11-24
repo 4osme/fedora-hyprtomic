@@ -434,7 +434,6 @@ hl.window_rule({
     opacity = 0.85,
 })
 
-xdg-desktop-portal-gtk
 hl.window_rule({
     name    = "float-gtk",
     match   = { class = "xdg-desktop-portal-gtk" },
