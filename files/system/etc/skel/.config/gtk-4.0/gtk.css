@@ -65,10 +65,9 @@ window {
   background: @window_bg_color;
 }
 
-/* Rounded pills to match the shelf / control-center language */
+/* Rounded pills for controls; keep the GTK theme's shape for popovers. */
 .text-button,
 button,
-popover.background > contents,
 .navigation-sidebar row,
 switch slider {
   border-radius: 999px;
