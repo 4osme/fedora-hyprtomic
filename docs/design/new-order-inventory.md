@@ -55,7 +55,7 @@
 | cliphist | dnf | IMG | **廃止候補** | DMS の clipboard に置換 |
 | brightnessctl / playerctl / libnotify | dnf | IMG | 継続 | DMS/キーバインドの依存 |
 | dex-autostart | dnf | IMG | 継続 | XDG autostart（Flatpak の自動起動） |
-| distrobox | dnf | IMG | 継続 | GUI 用ではなくユーザーの任意コンテナ用 |
+| distrobox | dnf | IMG | 継続 | ユーザーの任意コンテナ用。GUI アプリは `hyprtomic-distrobox-apps` が DMS ランチャーへ自動登録 |
 | python3-gobject / python3-cairo | dnf | IMG | **廃止候補** | 旧 Quickshell の Python 連携用。DMS では不要 |
 | fastfetch | dnf | IMG | 継続 | ベースシェル設定が使用 |
 | file-roller | dnf | IMG | 継続 | アーカイブ管理（dfiles と独立） |
@@ -181,7 +181,7 @@
 | `desktop/hyprland.nix` | Hyprland + uwsm + xwayland | IMG | 継続 | wayblue base が提供 |
 | `system/sddm.nix` | SDDM テーマ + fingerprint PAM + fprintd | IMG | **移設** | テーマと PAM gate を RPM/ファイルで |
 | `system/locale.nix` | ja_JP、jp106、fcitx5 + mozkey | IMG | **移設（Mozkey）** | 上流の Fedora RPM を IMG に導入 |
-| `system/audio.nix` | PipeWire quantum/buffer 調整、rtkit | IMG | **移設** | wireplumber 設定として持ち込む |
+| `system/audio.nix` | PipeWire quantum/buffer 調整、rtkit | IMG | **移設（完了）** | `files/system/etc/pipewire/…`, `etc/wireplumber/…`, `etc/modprobe.d/…` に配置 |
 | `system/networking.nix` | NetworkManager / Bluetooth | IMG | 継続 | |
 | `system/security.nix` | polkit / uinput / udev | IMG | 継続 | |
 | `system/portals.nix` | xdg-desktop-portal 構成 | IMG | 継続 | |
@@ -289,6 +289,7 @@
 | ghostty | `ghostty` | COPR `duxlabs/dux-repo` または `scottames/ghostty` | 端末 | 既存の scottames を継続しても可 |
 | Qt テーマ | `qt6ct-kde` | COPR `duxlabs/dux-repo` | Qt 配色 | Fedora 公式 `qt6ct` で足りるなら不要 |
 | Mozkey IbG | `mozkey-ibg` | 上流 GitHub Releases の Fedora RPM | 日本語 IME | v0.11.0（prerelease）。`fcitx5 >= 5.1.0` のみ要求。`install-mozkey.sh` で SHA256 検証 |
+| Mission Center | `mission-center` | Terra (`repos.fyralabs.com/terra$releasever`) | **新規（IMG）** | ネイティブ GTK4 のシステムモニタ。Flatpak サンドボックスを避ける。repo は `includepkgs=mission-center` で絞り、ghostty/matugen を dux-repo 版から置換しない。`io.missioncenter.MissionCenter` のフローティングルールは SKEL に既存 |
 | satty | `satty` | 要検証（Fedora 公式に無し） | スクショ注釈 | COPR を探す。無ければ USR |
 | adw-gtk3 | `adw-gtk3` | 要検証（Fedora 公式に無し） | DMS GTK テーマ | COPR を探す。無ければ USR |
 | nwg-displays | `nwg-displays` | 要検証（Fedora 公式に無し） | モニタ/ワークスペース設定（任意） | DMS outputs と役割分担 |

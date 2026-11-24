@@ -13,6 +13,8 @@ set -euo pipefail
 repo="${HYPRTOMIC_USER_DIR:-$HOME/.config/hyprtomic-user}"
 state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/hyprtomic"
 manifest_file="$state_dir/user-manifest"
+# Kept global so the EXIT trap can still see it after cmd_apply returns.
+new_manifest=""
 
 die() { echo "user-config: $*" >&2; exit 1; }
 
@@ -86,6 +88,18 @@ return {
 EOF
     fi
 
+    # OpenCode's TUI captures the mouse by default, which suppresses the
+    # terminal's native right-click menu. Disable it in the CLI settings.
+    mkdir -p "$repo/home/.config/opencode"
+    if [ ! -f "$repo/home/.config/opencode/cli.json" ]; then
+        cat >"$repo/home/.config/opencode/cli.json" <<'EOF'
+{
+  "$schema": "https://opencode.ai/v2/cli.json",
+  "mouse": false
+}
+EOF
+    fi
+
     if [ ! -d "$repo/.git" ]; then
         git -C "$repo" init -q
     fi
@@ -146,7 +160,6 @@ cmd_apply() {
     local dry_run="$1" prune="$2"
     [ -d "$repo/home" ] || die "no $repo/home (run 'ujust user-config-init')"
 
-    local new_manifest
     new_manifest="$(mktemp)"
     trap 'rm -f "$new_manifest"' EXIT
     repo_files >"$new_manifest"

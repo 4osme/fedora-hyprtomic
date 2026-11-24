@@ -1,0 +1,13 @@
+[Unit]
+Description=Keep DMS launcher entries in sync with distrobox applications
+Documentation=man:distrobox(1)
+After=hyprland-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/libexec/hyprtomic/distrobox-apps --watch
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

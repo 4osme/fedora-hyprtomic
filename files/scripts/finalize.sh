@@ -6,6 +6,9 @@ chmod +x /usr/libexec/hyprtomic/user-config
 chmod +x /usr/libexec/hyprtomic/machine-config
 chmod +x /usr/libexec/hyprtomic/seed-dms-wallpaper
 chmod +x /usr/libexec/hyprtomic/pam-fingerprint-gate
+chmod +x /usr/libexec/hyprtomic/distrobox-apps
+chmod +x /usr/libexec/hyprtomic/distrobox-app-hooks
+chmod +x /usr/libexec/hyprtomic/distrobox-host-dbus
 # skel helpers invoked directly by the user / Hyprland
 chmod +x /etc/skel/.local/bin/sunshine-session
 chmod +x /etc/skel/.config/sunshine/hypr-stream-display.py

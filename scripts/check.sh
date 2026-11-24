@@ -52,7 +52,10 @@ if command -v shellcheck >/dev/null 2>&1; then
     shellcheck -S warning -s bash \
         files/system/usr/libexec/hyprtomic/user-config \
         files/system/usr/libexec/hyprtomic/machine-config \
-        files/system/usr/libexec/hyprtomic/seed-dms-wallpaper || fail=1
+        files/system/usr/libexec/hyprtomic/seed-dms-wallpaper \
+        files/system/usr/libexec/hyprtomic/distrobox-apps \
+        files/system/usr/libexec/hyprtomic/distrobox-app-hooks \
+        files/system/usr/libexec/hyprtomic/distrobox-host-dbus || fail=1
     shellcheck -S warning -s bash \
         files/system/usr/libexec/hyprtomic/setup-*.sh || fail=1
     shellcheck -S warning -s sh \

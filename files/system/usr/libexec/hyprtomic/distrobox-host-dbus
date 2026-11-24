@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# Give a distrobox access to the host system bus. Container apps then see the
+# host's BlueZ/NetworkManager, which is required for Chrome's Bluetooth
+# passkeys (WebAuthn hybrid transport) and for bluetoothctl/nmcli in a shell.
+#
+#   distrobox-host-dbus CONTAINER      # one container
+#   distrobox-host-dbus all            # every known container
+#
+# The env var is stored in podman's container config, so it survives restarts.
+# Running apps must be restarted to pick it up.
+set -euo pipefail
+
+SYSBUS="unix:path=/run/host/run/dbus/system_bus_socket"
+target="${1:-}"
+[ -n "$target" ] || { echo "usage: distrobox-host-dbus CONTAINER|all" >&2; exit 2; }
+
+container_names() {
+    distrobox list --no-color 2>/dev/null | awk -F'|' '
+        NR > 1 {
+            name = $2
+            gsub(/^[ \t]+|[ \t]+$/, "", name)
+            if (name != "") print name
+        }'
+}
+
+if [ "$target" = all ]; then
+    names="$(container_names)"
+else
+    names="$target"
+fi
+
+[ -n "$names" ] || { echo "no containers found" >&2; exit 1; }
+
+while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    podman container update --env "DBUS_SYSTEM_BUS_ADDRESS=${SYSBUS}" "$name" >/dev/null
+    echo "host system bus enabled for '$name'; restart its apps to apply"
+done <<< "$names"
