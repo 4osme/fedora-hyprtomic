@@ -115,6 +115,28 @@ GUI apps installed inside a distrobox are registered with the host launcher
   for Bluetooth passkeys in containerised Chrome and for `bluetoothctl`/`nmcli`
   inside the container. Running apps must be restarted afterwards.
 
+### Zsh completion and suggestions
+
+The shipped `.zshrc` supports Antidote for completions, history suggestions,
+and syntax highlighting on both the host and Distrobox. Without Antidote it
+falls back to the Fedora plugins where available.
+
+After updating the image, back up any custom `~/.zshrc` and copy the two Zsh
+files from `/etc/skel` (or merge the changes if you manage them yourself).
+Install Antidote once per home directory; a Distrobox that shares the host's
+home does not need its own copy. A container with a separate home needs the
+two files and Antidote in that home.
+
+```bash
+cp /etc/skel/.zshrc /etc/skel/.zsh_plugins.txt "$HOME/"
+git clone --depth=1 https://github.com/mattmc3/antidote.git \
+  "${XDG_DATA_HOME:-$HOME/.local/share}/antidote"
+```
+
+Open a new Zsh session. The first Antidote load downloads the listed plugins
+with Git. Completion caches are kept separate for each container and Zsh
+version.
+
 ## Audio
 
 Chrome in a minimal Arch distrobox needs `libpulse` inside the container to
