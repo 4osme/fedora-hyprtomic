@@ -161,6 +161,33 @@ intended one with `pactl list short sinks` and
 `ujust audio-default-sink <name>` (e.g. the S-W4 USB sink or a Bluetooth
 headset).
 
+## Flatpak fonts
+
+Flatpak 1.18 and newer expose the host fonts to a sandbox only through
+`/run/host/font-dirs.xml`, whose `<remap-dir>` entries point at the host font
+directories plus the caches the host fontconfig wrote for them (mounted
+read-only at `/run/host/fonts-cache`). Chromium and Electron apps ship their
+own fontconfig with a different cache format, so it finds no usable cache
+there and the host fonts stay invisible: Latin still renders from the
+runtime's own fonts, but CJK text becomes tofu.
+
+`/usr/libexec/hyprtomic/flatpak-fonts` writes a per-app
+`~/.var/app/<id>/config/fontconfig/fonts.conf` with plain `<dir>` entries for
+`/run/host/fonts`, `/run/host/local-fonts`, `/run/host/user-fonts` and
+`/run/host/user-fonts-legacy`, so the bundled fontconfig scans the host fonts
+itself and writes its own cache. Apps that already carry their own
+`fonts.conf` are left untouched.
+
+It runs automatically at session start. To re-apply it (for example after
+installing a new Chromium/Electron app):
+
+```bash
+ujust fix-flatpak-fonts
+```
+
+Restart the affected apps afterwards. Apps that use the runtime's fontconfig
+(Firefox and most GTK/Qt apps) are not affected.
+
 ## Ghostty
 
 The shipped config sets `mouse-reporting = false` so right-click always stays

@@ -194,16 +194,27 @@ hyprtomic-user/                  # git リポジトリ
 ## 8. hyprland.lua の include 順（SKEL 側）
 
 ```
-theme.lua            (SKEL)    既定配色
+dms/colors.lua       (RUNTIME) DMS が生成。枠・グループバーの配色
+dms/outputs.lua      (RUNTIME) DMS が生成。モニタ構成
+dms/layout.lua       (RUNTIME) DMS が生成。不透明度・Blur・角丸・gaps
+dms/input.lua        (RUNTIME) DMS が生成。ポインタ / キーボード設定
+dms/windowrules.lua  (RUNTIME) DMS が生成。ウィンドウルール
+dms/binds.lua        (RUNTIME) DMS が生成。既定ショートカット
+dms/binds-user.lua   (RUNTIME) ユーザーのショートカット上書き
 workspaces.lua       (USR)     任意。ワークスペース割当
-dms/outputs.lua      (RUNTIME) DMS が生成
-dms/colors.lua       (RUNTIME) DMS が生成
 host.lua             (USR)     モニタ・GPU 固有
 user.lua             (USR)     最後。何でも上書きできる
 ```
 
-`user.lua` / `host.lua` は「テーブルを返す」形式にすると、SKEL 側の既定値を安全に上書きできる。
-`local.conf` は後方互換のため残すが、新規は `user.lua` を使う。
+- DMS の断片は `require("dms.<name>")` で読み込む。`require` だと Hyprland が
+  読み込んだファイルを監視するため、壁紙変更で DMS が書き換えたときに config が
+  自動リロードされる (`dofile` ではリロードされない)。
+- 配色と透明度は DMS に一本化する。SKEL 側の `hyprland.lua` に色・透明度を
+  書くと DMS の生成値を上書きし、GUI アプリ間で配色がずれる。
+- `dms/cursor.lua` だけは読み込まない。カーソルは SKEL 側 (Bibata) と
+  dconf / GTK の設定で揃える。
+- `user.lua` / `host.lua` は「テーブルを返す」形式にすると、SKEL 側の既定値を安全に上書きできる。
+- `local.conf` は後方互換のため残すが、新規は `user.lua` を使う。
 
 ## 9. 再構築の流れ
 

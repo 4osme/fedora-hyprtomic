@@ -164,6 +164,7 @@ modules:
         - gvfs-mtp
         - gvfs-smb
         - afuse
+        - fuse
         - sshfs # SSH-backed FUSE mounts for remote filesystems
         - udisks2
         - bubblewrap
@@ -204,6 +205,7 @@ modules:
         - rsync
         - unzip
         - btop
+        - picocom # serial console (routers, SBCs, embedded boards)
 
         # --- User containers (not GUI: the shell no longer lives in one)
         - distrobox

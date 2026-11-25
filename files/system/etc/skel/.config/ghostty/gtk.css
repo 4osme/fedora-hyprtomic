@@ -1,19 +1,27 @@
-/* Ghostty タブバー - Pure Black ベース + 白色系で視認性向上 */
+/* Ghostty タブバー
+ *
+ * 配色は端末のテーマに追従させる。Ghostty は window-theme = ghostty のとき
+ * 次の CSS 変数を定義する:
+ *   --ghostty-bg / --ghostty-fg      … 端末の背景色 / 前景色 (DMS テーマ値)
+ *   --window-bg-color / --window-fg-color … ウィンドウの配色
+ * ここで色をハードコードすると DMS の配色とずれて不整合になるので、
+ * 必ず var() を使い、濃淡は color-mix() で前景色から導く。
+ */
 
 /* タブバー全体の背景 */
 tabbar > revealer > box {
-    background-color: #121212;
+    background-color: var(--window-bg-color);
     background-image: none;
     padding: 0;
     margin: 0;
-    border-top: 1px solid #2a2a2a;
+    border-top: 1px solid color-mix(in srgb, var(--window-fg-color), transparent 85%);
 }
 
 /* 各タブ (非アクティブ) */
 tabbar tab {
-    background-color: #121212;
+    background-color: color-mix(in srgb, var(--window-bg-color), var(--window-fg-color) 6%);
     background-image: none;
-    color: #999999;
+    color: color-mix(in srgb, var(--window-fg-color), transparent 40%);
     padding: 2px 12px;
     margin: 0;
     border-bottom: 2px solid transparent;
@@ -22,17 +30,17 @@ tabbar tab {
 
 /* アクティブタブ */
 tabbar tab:selected {
-    background-color: #1e1e1e;
+    background-color: color-mix(in srgb, var(--window-bg-color), var(--window-fg-color) 12%);
     background-image: none;
-    color: #ffffff;
-    border-bottom: 3px solid #ffffff;
+    color: var(--window-fg-color);
+    border-bottom: 3px solid var(--window-fg-color);
 }
 
 /* ホバー時 */
 tabbar tab:hover:not(:selected) {
-    background-color: #181818;
+    background-color: color-mix(in srgb, var(--window-bg-color), var(--window-fg-color) 10%);
     background-image: none;
-    color: #dddddd;
+    color: color-mix(in srgb, var(--window-fg-color), transparent 20%);
 }
 
 /* タブ区切り線を消す */
@@ -43,25 +51,25 @@ tabbar tab separator {
 /* 新規タブボタン */
 tabbar startactionbar,
 tabbar endactionbar {
-    background-color: #121212;
+    background-color: var(--window-bg-color);
     background-image: none;
 }
 
 /* 新規タブ + ボタン */
 tabbar startactionbar button,
 tabbar endactionbar button {
-    color: #999999;
+    color: color-mix(in srgb, var(--window-fg-color), transparent 40%);
     background-color: transparent;
     background-image: none;
 }
 
 tabbar startactionbar button:hover,
 tabbar endactionbar button:hover {
-    color: #ffffff;
-    background-color: #1e1e1e;
+    color: var(--window-fg-color);
+    background-color: color-mix(in srgb, var(--window-bg-color), var(--window-fg-color) 12%);
 }
 
 /* スクロール可能タブの矢印 */
 tabbar scrolledwindow {
-    background-color: #121212;
+    background-color: var(--window-bg-color);
 }

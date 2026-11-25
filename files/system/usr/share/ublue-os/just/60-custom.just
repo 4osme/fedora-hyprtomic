@@ -135,6 +135,16 @@ machine-apply:
 machine-export:
     @/usr/libexec/hyprtomic/machine-config export
 
+# --- Fonts ---
+
+# Fix CJK rendering in Chromium/Electron flatpaks: flatpak >= 1.18 exposes the
+# host fonts only through caches their bundled fontconfig cannot read, so every
+# host font disappears (Japanese renders as tofu). Writes a per-app
+# ~/.var/app/<id>/config/fontconfig/fonts.conf; restart the affected apps
+# afterwards. Also runs automatically on session start.
+fix-flatpak-fonts:
+    @/usr/libexec/hyprtomic/flatpak-fonts
+
 # --- Distrobox integration ---
 
 # Re-scan running containers now (install/remove of a GUI app, hidden entry,

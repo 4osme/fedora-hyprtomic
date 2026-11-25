@@ -123,9 +123,9 @@
 | `.config/fcitx5/classicui.conf` | IME UI | SKEL | 継続 | |
 | `.config/fcitx5/profile` | IME グループ/エンジン | SKEL | 継続（seed） | エンジン名は `mozkey-ibg`。実行時に fcitx5 が書き換える前提 |
 | `.config/fontconfig/**` | フォント優先度 | SKEL | 継続 | |
-| `.config/ghostty/config` / `gtk.css` | 端末 | SKEL | 継続 | `gtk.css` は DMS/matugen が生成。静的版はフォールバック |
-| `.config/gtk-3.0` / `gtk-4.0` | GTK 配色 | SKEL | 継続 | DMS が上書き |
-| `.config/hypr/hyprland.lua` | コンポジタ基本設定 | SKEL | **継続（改修）** | DMS include・ユーザー include を追加 |
+| `.config/ghostty/config` / `gtk.css` | 端末 | SKEL | 継続 | 配色は DMS 生成の `~/.config/ghostty/themes/dankcolors` を `theme` で読む。`gtk.css` はタブバー用のスタイルシート (CSS 変数でテーマ値から導く) |
+| `.config/gtk-3.0` / `gtk-4.0` | GTK 配色 | SKEL | 継続 | 固定パレットは置かず `@import url("dank-colors.css")` のみ。DMS 生成色に统一的 |
+| `.config/hypr/hyprland.lua` | コンポジタ基本設定 | SKEL | **継続（改修）** | DMS 断片 (colors/outputs/layout/input/binds/windowrules) を `require` で取り込み、色は DMS に一本化 |
 | `.config/hypr/hypridle.conf` | アイドル | SKEL | 継続 | マシン別の緩和は USR |
 | `.config/hypr/hyprlock.conf` | ロック画面 | SKEL | 継続 | |
 | `.config/hypr/layouts/quadgrid.lua` | レイアウト | SKEL | 継続 | |
@@ -235,6 +235,7 @@
 | `home-main-desktop/.local/bin/sunshine-session` | SKEL | **移設（完了）** | 仮想ディスプレイ運用 |
 | `sddm-theme/**`（FingerprintStatus.qml 含む） | IMG | **移設（完了）** | `usr/share/hyprtomic/sddm/` に配置 |
 | `system/pam.d/pam-fingerprint-gate` | IMG | **移設（完了）** | `usr/libexec/hyprtomic/pam-fingerprint-gate`。fprintd は IMG、CS9711 ドライバは HOST |
+| `system/usr/libexec/hyprtomic/flatpak-fonts` | IMG | **移設（完了）** | flatpak ≥ 1.18 の remap-dir を Chromium/Electron の同梱 fontconfig が読めないため、アプリごとの fonts.conf を書いてホストフォントを見せる |
 
 ### 2.4 ホスト固有（`hosts/main-desktop/`）
 
