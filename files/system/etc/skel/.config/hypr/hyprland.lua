@@ -140,6 +140,10 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("hypridle")
     hl.exec_cmd("gnome-keyring-daemon --start --components=secrets,pkcs11,ssh")
     hl.exec_cmd("hyprctl setcursor Bibata-Modern-Classic 36")
+    -- Chromium/Electron flatpaks ship their own fontconfig and cannot read
+    -- the host font caches, so the host fonts (CJK included) stay invisible
+    -- and Japanese renders as tofu. Writes a per-app fontconfig fix.
+    hl.exec_cmd("/usr/libexec/hyprtomic/flatpak-fonts")
     hl.exec_cmd("sleep 2 && dbus-update-activation-environment --systemd DISPLAY WAYLAND_DISPLAY XDG_CURRENT_DESKTOP")
 end)
 

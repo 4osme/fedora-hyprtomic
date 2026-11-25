@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# Keep Chromium/Electron flatpaks able to see the host fonts.
+#
+# Why: flatpak >= 1.18 hands the host fonts to the sandbox only through
+# /run/host/font-dirs.xml, whose <remap-dir> entries point at the host font
+# directories plus the caches the host fontconfig wrote for them
+# (/run/host/fonts-cache, mounted read-only). Chromium and Electron ship their
+# own fontconfig with a different cache format, so it finds no usable cache in
+# that read-only directory and the host fonts stay invisible: Latin still
+# renders from the runtime's own fonts, but CJK falls back to tofu.
+#
+# Fix: a plain <dir> entry in the app's own fontconfig re-registers the host
+# font directories after the runtime's 50-flatpak.conf (user config is read
+# last, so it wins), which makes the bundled fontconfig scan them and write
+# its own cache under the sandbox's writable cache dir. Restart the affected
+# app afterwards.
+#
+# Run at session start from hyprland.lua, or manually:
+#   /usr/libexec/hyprtomic/flatpak-fonts
+#   ujust fix-flatpak-fonts
+set -uo pipefail
+
+command -v flatpak >/dev/null 2>&1 || exit 0
+
+MARKER="HyprTomic flatpak font fix"
+
+# An app needs the fix when it ships its own fontconfig: the bundled one is
+# newer than the host cache format, so it cannot use the remapped dirs and
+# only the fonts of the runtime itself show up.
+bundles_fontconfig() {
+    local app="$1" location
+    location="$(flatpak info --show-location "$app" 2>/dev/null)" || return 1
+    [ -n "$location" ] || return 1
+    compgen -G "$location/files/lib/libfontconfig.so*" >/dev/null 2>&1 ||
+        compgen -G "$location/files/lib/*/libfontconfig.so*" >/dev/null 2>&1
+}
+
+fonts_conf() {
+    cat <<EOF
+<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">
+<fontconfig>
+  <!-- $MARKER: make the bundled fontconfig scan the host fonts itself. -->
+  <dir>/run/host/fonts</dir>
+  <dir>/run/host/local-fonts</dir>
+  <dir>/run/host/user-fonts</dir>
+  <dir>/run/host/user-fonts-legacy</dir>
+</fontconfig>
+EOF
+}
+
+for app in $(flatpak list --app --columns=application 2>/dev/null); do
+    meta="$(flatpak info --show-metadata "$app" 2>/dev/null)" || continue
+
+    # Chromium- and Electron-based apps bundle their own fontconfig.
+    case "$meta" in
+        *"base=app/org.chromium."*|*"base=app/org.electronjs."*) ;;
+        *)
+            bundles_fontconfig "$app" || continue
+            ;;
+    esac
+
+    conf="$HOME/.var/app/$app/config/fontconfig/fonts.conf"
+
+    if [ -e "$conf" ] && ! grep -q "$MARKER" "$conf" 2>/dev/null; then
+        echo "flatpak-fonts: $app has a custom fonts.conf, leaving it alone" >&2
+        continue
+    fi
+
+    if [ -f "$conf" ] && fonts_conf | cmp -s - "$conf"; then
+        continue
+    fi
+
+    install -d "$(dirname "$conf")"
+    fonts_conf >"$conf"
+    echo "flatpak-fonts: fixed $app (restart the app to apply)"
+done
+
+exit 0

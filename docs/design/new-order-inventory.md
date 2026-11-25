@@ -235,6 +235,7 @@
 | `home-main-desktop/.local/bin/sunshine-session` | SKEL | **移設（完了）** | 仮想ディスプレイ運用 |
 | `sddm-theme/**`（FingerprintStatus.qml 含む） | IMG | **移設（完了）** | `usr/share/hyprtomic/sddm/` に配置 |
 | `system/pam.d/pam-fingerprint-gate` | IMG | **移設（完了）** | `usr/libexec/hyprtomic/pam-fingerprint-gate`。fprintd は IMG、CS9711 ドライバは HOST |
+| `system/usr/libexec/hyprtomic/flatpak-fonts` | IMG | **移設（完了）** | flatpak ≥ 1.18 の remap-dir を Chromium/Electron の同梱 fontconfig が読めないため、アプリごとの fonts.conf を書いてホストフォントを見せる |
 
 ### 2.4 ホスト固有（`hosts/main-desktop/`）
 

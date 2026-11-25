@@ -53,6 +53,7 @@ if command -v shellcheck >/dev/null 2>&1; then
         files/system/usr/libexec/hyprtomic/user-config \
         files/system/usr/libexec/hyprtomic/machine-config \
         files/system/usr/libexec/hyprtomic/seed-dms-wallpaper \
+        files/system/usr/libexec/hyprtomic/flatpak-fonts \
         files/system/usr/libexec/hyprtomic/distrobox-apps \
         files/system/usr/libexec/hyprtomic/distrobox-app-hooks \
         files/system/usr/libexec/hyprtomic/distrobox-host-dbus || fail=1
