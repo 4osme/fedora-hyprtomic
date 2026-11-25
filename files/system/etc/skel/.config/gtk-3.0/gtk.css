@@ -1,31 +1,25 @@
+@import url("dank-colors.css");
 /*
- * GTK3 palette for the default md3-cobalt-night theme.
- * DMS + matugen regenerate ~/.config/gtk-3.0/gtk.css when the wallpaper
- * changes; this static copy is the pre-theming fallback.
+ * GTK3 の配色は DMS (matugen) が生成する dank-colors.css に任せる。
+ *
+ * ここに固定の @define-color を書くと、DMS の import (dank-colors.css) が
+ * 後から上書きされず、壁紙から生成された配色が GTK3 アプリに反映されない。
+ * 色は必ずこの import 経由で、与える値も固定値ではなく DMS の色名を使う。
  */
 
-@define-color bg_color #0F1117;
-@define-color fg_color #E0E2F0;
-@define-color base_color #0F1117;
-@define-color text_color #E0E2F0;
-@define-color selected_bg_color #9BBDE8;
-@define-color selected_fg_color #0F1117;
-@define-color tooltip_bg_color #2E3148;
-@define-color tooltip_fg_color #E0E2F0;
-@define-color theme_bg_color #0F1117;
-@define-color theme_fg_color #E0E2F0;
-@define-color theme_base_color #0F1117;
-@define-color theme_text_color #E0E2F0;
-@define-color theme_selected_bg_color #9BBDE8;
-@define-color theme_selected_fg_color #0F1117;
-@define-color theme_unfocused_bg_color #1A1C28;
-@define-color theme_unfocused_fg_color #8E90A8;
-@define-color theme_unfocused_base_color #0F1117;
-@define-color theme_unfocused_text_color #8E90A8;
-@define-color borders #252740;
-@define-color unfocused_borders #1A1C28;
-@define-color warning_color #F2D479;
-@define-color error_color #F2A8B8;
-@define-color success_color #86D5A0;
-@define-color insensitive_bg_color #1A1C28;
-@define-color insensitive_fg_color #8E90A8;
+/* dank-colors.css が定義していない旧来の色名を DMS の色へ寄せる
+ * (GTK3 のテーマと GTK3 アプリが参照する色名) */
+@define-color bg_color @window_bg_color;
+@define-color fg_color @window_fg_color;
+@define-color base_color @view_bg_color;
+@define-color text_color @view_fg_color;
+@define-color selected_bg_color @accent_bg_color;
+@define-color selected_fg_color @accent_fg_color;
+@define-color tooltip_bg_color @card_bg_color;
+@define-color tooltip_fg_color @card_fg_color;
+@define-color theme_bg_color @window_bg_color;
+@define-color theme_fg_color @window_fg_color;
+@define-color theme_base_color @view_bg_color;
+@define-color theme_text_color @view_fg_color;
+@define-color theme_selected_bg_color @accent_bg_color;
+@define-color theme_selected_fg_color @accent_fg_color;

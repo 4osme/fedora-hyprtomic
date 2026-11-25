@@ -5,14 +5,21 @@
 -- は登録のみ行い、適用は workspace_rule に委ねる。
 --
 -- このファイルはイメージ (SKEL) の既定値。ユーザー設定は末尾で読み込む:
+--   ~/.config/hypr/dms/*.lua          (DMS が生成) colors / outputs / layout /
+--                                     input / binds / binds-user / windowrules
+--                                     (cursor は SKEL 側の指定を優先)
 --   ~/.config/hypr/workspaces.lua     (任意) ワークスペース割当
---   ~/.config/hypr/dms/*.lua          (DMS が生成) outputs / colors / windowrules
 --   ~/.config/hypr/sunshine.lua       (SKEL) Sunshine ストリーミング用レイアウト
 --   ~/.config/hypr/host.lua           (任意) マシン固有
 --   ~/.config/hypr/user.lua           (任意) 最後に読み込み、何でも上書きできる
 --   ~/.config/hypr/local.conf         (旧形式) return { monitor_primary = "DP-1" }
 -- local.conf / user.lua / host.lua / workspaces.lua は /etc/skel に同梱しない
 -- (sync-skel-config の overwrite=1 同期で上書きされないよう)。
+--
+-- 配色と透明度は DMS の設定 (Settings → Wallpaper & colors) に一本化する。
+-- このファイルには色・透明度の値を書かない: 書くと DMS が生成する
+-- dms/colors.lua や dms/layout.lua の値を上書きし、GUI アプリ間で
+-- 配色がずれる (例: 端末は DMS の色、バーは Hyprland の既定色)。
 
 -- Monitor - auto detect (host.lua / user.lua で上書き可能)
 hl.monitor({
@@ -45,6 +52,35 @@ local function _dofile(path)
     if not ok then
         hl.notification.create({ text = "hypr: failed to load " .. path, duration = 5000 })
     end
+end
+-- Load a DMS fragment (DMS writes them into ~/.config/hypr/dms/).
+--
+-- require() is used on purpose:
+--   - Hyprland tracks required files, so when DMS rewrites a fragment
+--     (wallpaper change, theme switch) the compositor reloads the config
+--     automatically and the new colors/opacity are applied.
+--   - DMS looks for `require("dms.<name>")` lines to decide whether a
+--     fragment is already included, so it does not append a second one.
+--
+-- The file may not exist yet (DMS creates the fragments when it starts),
+-- so the existence check keeps the config loadable on a fresh session.
+local function _dms(name)
+    local path = _HOME .. "/.config/hypr/dms/" .. name .. ".lua"
+    if not _exists(path) then
+        return
+    end
+    local ok = pcall(require, "dms." .. name)
+    if not ok then
+        hl.notification.create({ text = "hypr: failed to load dms/" .. name .. ".lua", duration = 5000 })
+    end
+end
+-- Bind a key, dropping any bind that is already registered for it.
+-- Hyprland runs every bind registered for a key combo, so a DMS stock bind
+-- and a bind from this file for the same combo would both fire. Unbinding
+-- first keeps this file (and user.lua) authoritative.
+local function _bind(key, dispatcher, opts)
+    hl.unbind(key)
+    hl.bind(key, dispatcher, opts)
 end
 local localCfg = {}
 if _exists(_HOME .. "/.config/hypr/local.conf") then
@@ -113,10 +149,7 @@ hl.config({
         gaps_in     = 5,
         gaps_out    = 10,
         border_size = 2,
-        col = {
-            active_border   = "rgba(8AB4F8cc)",
-            inactive_border = "rgba(33353Aaa)",
-        },
+        -- 枠の配色 (general.col) は DMS の dms/colors.lua が設定する。
         resize_on_border = true,
         allow_tearing    = false,
         layout           = "dwindle",
@@ -131,10 +164,8 @@ hl.config({
 
     -- Group (tabs) - integrated with terminal window
     group = {
-        col = {
-            border_active   = "rgba(ffffffcc)",
-            border_inactive = "rgba(808080aa)",
-        },
+        -- 枠・グループバーの配色 (group.col / groupbar.col) は
+        -- DMS の dms/colors.lua が設定する。
         -- auto_group=false: chrome 等の自動グループ参加を防止
         auto_group = false,
         groupbar = {
@@ -143,12 +174,8 @@ hl.config({
             height    = 24,
             gradients = true,
             blur      = true,
-            col = {
-                active   = "rgba(000000e6)",
-                inactive = "rgba(000000e6)",
-            },
-            text_color          = "rgba(ffffffff)",
-            text_color_inactive = "rgba(ffffffff)",
+            -- groupbar.col (背景) は DMS の dms/colors.lua が設定する。
+            -- text_color は Hyprland の既定 (白) のままにする。
             indicator_height    = 2,
             rounding            = 4,
             gradient_rounding   = 4,
@@ -165,8 +192,10 @@ hl.config({
         blur = {
             enabled = true,
             popups  = false,
-            size    = 4,
-            passes  = 1,
+            -- Blur の強さ (size / passes) とウィンドウの不透明度
+            -- (active_opacity / inactive_opacity) は DMS の dms/layout.lua
+            -- が設定する (Settings → System & integrations → Hyprland)。
+            -- ここでは手動で指定しない。
         },
     },
 
@@ -235,15 +264,22 @@ hl.animation({ leaf = "workspaces",    enabled = true, speed = 1.94, bezier = "a
 hl.animation({ leaf = "workspacesIn",  enabled = true, speed = 1.21, bezier = "almostLinear", style = "fade" })
 hl.animation({ leaf = "workspacesOut", enabled = true, speed = 1.94, bezier = "almostLinear", style = "fade" })
 
+-- DMS keybinds (Settings → Keyboard shortcuts で管理されるファイル)
+-- 先に読み込み、このファイル側のバインド (_bind) が上書きする。
+-- 同じキーに 2 つ登録されると Hyprland は両方を実行するため、
+-- _bind() は hl.unbind() を先に行う。
+_dms("binds")
+_dms("binds-user")
+
 -- Keybindings
-hl.bind(mainMod .. " + S", hl.dsp.exec_cmd("dms ipc call keybinds toggle hyprland"), { desc = "キーバインドを確認" })
-hl.bind(mainMod .. " + Q", hl.dsp.exec_cmd(terminal), { desc = "ターミナルを開く (単体)" })
-hl.bind(mainMod .. " + X", hl.dsp.window.close(), { desc = "アクティブウィンドウを閉じる" })
-hl.bind(mainMod .. " + E", hl.dsp.exec_cmd(fileManager), { desc = "ファイルマネージャを開く" })
+_bind(mainMod .. " + S", hl.dsp.exec_cmd("dms ipc call keybinds toggle hyprland"), { desc = "キーバインドを確認" })
+_bind(mainMod .. " + Q", hl.dsp.exec_cmd(terminal), { desc = "ターミナルを開く (単体)" })
+_bind(mainMod .. " + X", hl.dsp.window.close(), { desc = "アクティブウィンドウを閉じる" })
+_bind(mainMod .. " + E", hl.dsp.exec_cmd(fileManager), { desc = "ファイルマネージャを開く" })
 -- タイル窓を float 化すると直前のタイルサイズがそのまま採用され画面をほぼ覆ってしまう
 -- (windowrule の max_size は togglefloating では再評価されず効かない実測済み) ため、
 -- float 化した直後に限り明示的に上限までリサイズしてセンタリングする
-hl.bind(mainMod .. " + F", function()
+_bind(mainMod .. " + F", function()
     local w = hl.get_active_window()
     local wasFloating = w and w.floating
     hl.dispatch(hl.dsp.window.float({ action = "toggle" }))
@@ -261,19 +297,19 @@ hl.bind(mainMod .. " + F", function()
         hl.dispatch(hl.dsp.window.center())
     end
 end, { desc = "フローティング切り替え" })
-hl.bind("SUPER + Alt_L", hl.dsp.exec_cmd("dms ipc call widget toggle launcherButton"), { desc = "アプリランチャを開く" })
-hl.bind(mainMod .. " + P", hl.dsp.window.pseudo(), { desc = "Pseudo モード切り替え (dwindle)" })
-hl.bind(mainMod .. " + J", hl.dsp.layout("togglesplit"), { desc = "スプリット方向切り替え (dwindle)" })
-hl.bind(mainMod .. " + L", hl.dsp.exec_cmd("hyprlock"), { desc = "画面ロック" })
-hl.bind(mainMod .. " + C", hl.dsp.exec_cmd("flatpak run org.mozilla.firefox"), { desc = "Firefox を開く" })
-hl.bind(mainMod .. " + M", hl.dsp.exec_cmd("mission-center"), { desc = "プロセス / パフォーマンス" })
-hl.bind(mainMod .. " + B", hl.dsp.exec_cmd("flatpak run com.bitwarden.desktop"), { desc = "Bitwarden を開く" })
+_bind("SUPER + Alt_L", hl.dsp.exec_cmd("dms ipc call widget toggle launcherButton"), { desc = "アプリランチャを開く" })
+_bind(mainMod .. " + P", hl.dsp.window.pseudo(), { desc = "Pseudo モード切り替え (dwindle)" })
+_bind(mainMod .. " + J", hl.dsp.layout("togglesplit"), { desc = "スプリット方向切り替え (dwindle)" })
+_bind(mainMod .. " + L", hl.dsp.exec_cmd("hyprlock"), { desc = "画面ロック" })
+_bind(mainMod .. " + C", hl.dsp.exec_cmd("flatpak run org.mozilla.firefox"), { desc = "Firefox を開く" })
+_bind(mainMod .. " + M", hl.dsp.exec_cmd("mission-center"), { desc = "プロセス / パフォーマンス" })
+_bind(mainMod .. " + B", hl.dsp.exec_cmd("flatpak run com.bitwarden.desktop"), { desc = "Bitwarden を開く" })
 
 -- Focus
-hl.bind(mainMod .. " + left",  hl.dsp.focus({ direction = "left" }),  { desc = "フォーカス移動: 左" })
-hl.bind(mainMod .. " + right", hl.dsp.focus({ direction = "right" }), { desc = "フォーカス移動: 右" })
-hl.bind(mainMod .. " + up",    hl.dsp.focus({ direction = "up" }),    { desc = "フォーカス移動: 上" })
-hl.bind(mainMod .. " + down",  hl.dsp.focus({ direction = "down" }),  { desc = "フォーカス移動: 下" })
+_bind(mainMod .. " + left",  hl.dsp.focus({ direction = "left" }),  { desc = "フォーカス移動: 左" })
+_bind(mainMod .. " + right", hl.dsp.focus({ direction = "right" }), { desc = "フォーカス移動: 右" })
+_bind(mainMod .. " + up",    hl.dsp.focus({ direction = "up" }),    { desc = "フォーカス移動: 上" })
+_bind(mainMod .. " + down",  hl.dsp.focus({ direction = "down" }),  { desc = "フォーカス移動: 下" })
 
 -- Move window (quadgrid 上では隣接セルへ移動。先客が居れば縮小して同居)
 local function moveWindowAction(dir)
@@ -282,97 +318,86 @@ local function moveWindowAction(dir)
     end
     return hl.dsp.window.move({ direction = dir })
 end
-hl.bind(mainMod .. " + SHIFT + left",  moveWindowAction("left"),  { desc = "ウィンドウ移動: 左" })
-hl.bind(mainMod .. " + SHIFT + right", moveWindowAction("right"), { desc = "ウィンドウ移動: 右" })
-hl.bind(mainMod .. " + SHIFT + up",    moveWindowAction("up"),    { desc = "ウィンドウ移動: 上" })
-hl.bind(mainMod .. " + SHIFT + down",  moveWindowAction("down"),  { desc = "ウィンドウ移動: 下" })
+_bind(mainMod .. " + SHIFT + left",  moveWindowAction("left"),  { desc = "ウィンドウ移動: 左" })
+_bind(mainMod .. " + SHIFT + right", moveWindowAction("right"), { desc = "ウィンドウ移動: 右" })
+_bind(mainMod .. " + SHIFT + up",    moveWindowAction("up"),    { desc = "ウィンドウ移動: 上" })
+_bind(mainMod .. " + SHIFT + down",  moveWindowAction("down"),  { desc = "ウィンドウ移動: 下" })
 
 -- Utilities
-hl.bind(mainMod .. " + Escape", hl.dsp.exec_cmd("rofi -show window"), { desc = "ウィンドウスイッチャ (rofi)" })
-hl.bind(mainMod .. " + SHIFT + S", hl.dsp.exec_cmd("dms screenshot"),
+_bind(mainMod .. " + Escape", hl.dsp.exec_cmd("rofi -show window"), { desc = "ウィンドウスイッチャ (rofi)" })
+_bind(mainMod .. " + SHIFT + S", hl.dsp.exec_cmd("dms screenshot"),
     { desc = "領域スクリーンショット (保存 + コピー)" })
-hl.bind(mainMod .. " + CTRL + SHIFT + S", hl.dsp.exec_cmd("dms screenshot --no-clipboard"),
+_bind(mainMod .. " + CTRL + SHIFT + S", hl.dsp.exec_cmd("dms screenshot --no-clipboard"),
     { desc = "領域スクリーンショット (保存のみ)" })
-hl.bind(mainMod .. " + SHIFT + P", hl.dsp.exec_cmd("dms color pick"), { desc = "カラーピッカー" })
-hl.bind(mainMod .. " + DELETE", hl.dsp.exec_cmd("dms ipc call powermenu toggle"), { desc = "電源メニュー" })
-hl.bind(mainMod .. " + A", hl.dsp.exec_cmd("dms ipc call control-center toggle"), { desc = "コントロールセンター" })
-hl.bind(mainMod .. " + V", hl.dsp.exec_cmd("dms ipc call clipboard toggle"), { desc = "クリップボード履歴" })
+_bind(mainMod .. " + SHIFT + P", hl.dsp.exec_cmd("dms color pick"), { desc = "カラーピッカー" })
+_bind(mainMod .. " + DELETE", hl.dsp.exec_cmd("dms ipc call powermenu toggle"), { desc = "電源メニュー" })
+_bind(mainMod .. " + A", hl.dsp.exec_cmd("dms ipc call control-center toggle"), { desc = "コントロールセンター" })
+_bind(mainMod .. " + V", hl.dsp.exec_cmd("dms ipc call clipboard toggle"), { desc = "クリップボード履歴" })
 
 -- Ghostty ネイティブタブを使用 (Ctrl+Shift+T/Q/←/→ は Ghostty が処理)
 
 -- Workspaces
 for i = 1, 10 do
     local key = i % 10 -- 10 は 0 キー
-    hl.bind(mainMod .. " + " .. key, hl.dsp.focus({ workspace = tostring(i) }),
+    _bind(mainMod .. " + " .. key, hl.dsp.focus({ workspace = tostring(i) }),
         { desc = "ワークスペース " .. i .. " へ" })
-    hl.bind(mainMod .. " + SHIFT + " .. key, hl.dsp.window.move({ workspace = tostring(i) }),
+    _bind(mainMod .. " + SHIFT + " .. key, hl.dsp.window.move({ workspace = tostring(i) }),
         { desc = "ウィンドウをワークスペース " .. i .. " に移動" })
 end
 
 -- Workspace scroll
-hl.bind(mainMod .. " + mouse_down",   hl.dsp.focus({ workspace = "e+1" }), { desc = "次のワークスペース (スクロール)" })
-hl.bind(mainMod .. " + mouse_up",     hl.dsp.focus({ workspace = "e-1" }), { desc = "前のワークスペース (スクロール)" })
-hl.bind(mainMod .. " + bracketleft",  hl.dsp.focus({ workspace = "e-1" }), { desc = "前のワークスペース" })
-hl.bind(mainMod .. " + bracketright", hl.dsp.focus({ workspace = "e+1" }), { desc = "次のワークスペース" })
-hl.bind(mainMod .. " + TAB",          hl.dsp.focus({ workspace = "e+1" }), { desc = "次のワークスペース (Tab)" })
+_bind(mainMod .. " + mouse_down",   hl.dsp.focus({ workspace = "e+1" }), { desc = "次のワークスペース (スクロール)" })
+_bind(mainMod .. " + mouse_up",     hl.dsp.focus({ workspace = "e-1" }), { desc = "前のワークスペース (スクロール)" })
+_bind(mainMod .. " + bracketleft",  hl.dsp.focus({ workspace = "e-1" }), { desc = "前のワークスペース" })
+_bind(mainMod .. " + bracketright", hl.dsp.focus({ workspace = "e+1" }), { desc = "次のワークスペース" })
+_bind(mainMod .. " + TAB",          hl.dsp.focus({ workspace = "e+1" }), { desc = "次のワークスペース (Tab)" })
 
 -- Disable noisy keys
-hl.bind("Caps_Lock", hl.dsp.no_op(), { desc = "Caps Lock 無効化" })
-hl.bind("Insert",    hl.dsp.no_op(), { desc = "Insert キー無効化" })
+_bind("Caps_Lock", hl.dsp.no_op(), { desc = "Caps Lock 無効化" })
+_bind("Insert",    hl.dsp.no_op(), { desc = "Insert キー無効化" })
 
 -- Resize (repeat)
-hl.bind(mainMod .. " + CTRL + left",  hl.dsp.window.resize({ x = -20, y = 0,  relative = true }), { repeating = true, desc = "ウィンドウリサイズ: 左 -20px" })
-hl.bind(mainMod .. " + CTRL + right", hl.dsp.window.resize({ x = 20,  y = 0,  relative = true }), { repeating = true, desc = "ウィンドウリサイズ: 右 +20px" })
-hl.bind(mainMod .. " + CTRL + up",    hl.dsp.window.resize({ x = 0,   y = -20, relative = true }), { repeating = true, desc = "ウィンドウリサイズ: 上 -20px" })
-hl.bind(mainMod .. " + CTRL + down",  hl.dsp.window.resize({ x = 0,   y = 20,  relative = true }), { repeating = true, desc = "ウィンドウリサイズ: 下 +20px" })
+_bind(mainMod .. " + CTRL + left",  hl.dsp.window.resize({ x = -20, y = 0,  relative = true }), { repeating = true, desc = "ウィンドウリサイズ: 左 -20px" })
+_bind(mainMod .. " + CTRL + right", hl.dsp.window.resize({ x = 20,  y = 0,  relative = true }), { repeating = true, desc = "ウィンドウリサイズ: 右 +20px" })
+_bind(mainMod .. " + CTRL + up",    hl.dsp.window.resize({ x = 0,   y = -20, relative = true }), { repeating = true, desc = "ウィンドウリサイズ: 上 -20px" })
+_bind(mainMod .. " + CTRL + down",  hl.dsp.window.resize({ x = 0,   y = 20,  relative = true }), { repeating = true, desc = "ウィンドウリサイズ: 下 +20px" })
 
 -- Mouse bindings
-hl.bind(mainMod .. " + mouse:273", hl.dsp.window.resize(), { mouse = true, desc = "マウスドラッグでウィンドウリサイズ" })
+_bind(mainMod .. " + mouse:273", hl.dsp.window.resize(), { mouse = true, desc = "マウスドラッグでウィンドウリサイズ" })
 if quadgrid then
     -- quadgrid: 押下でウィンドウのドラッグを開始し、解放後 (release follow-up) に
     -- ドロップ先のセルへ配置。先客の居るセルなら入れ替え、別モニタへのドロップは
     -- C++ 側のワークスペース移動に従う (詳細は layouts/quadgrid.lua)。
     -- ※ 押下用 (dispatcher) と解放用 (drag フラグ) の 2 bind に分けると、
     --    押下を消費した bind が解放用 bind を shadow して発火しない
-    hl.bind(mainMod .. " + mouse:272", quadgrid.on_drag, { mouse = true, desc = "quadgrid: ドラッグ&ドロップでセル移動" })
+    _bind(mainMod .. " + mouse:272", quadgrid.on_drag, { mouse = true, desc = "quadgrid: ドラッグ&ドロップでセル移動" })
 else
-    hl.bind(mainMod .. " + mouse:272", hl.dsp.window.drag(), { mouse = true, desc = "マウスドラッグでウィンドウ移動" })
+    _bind(mainMod .. " + mouse:272", hl.dsp.window.drag(), { mouse = true, desc = "マウスドラッグでウィンドウ移動" })
 end
 
 -- Locked bindings - work on lock screen
-hl.bind("XF86AudioRaiseVolume", hl.dsp.exec_cmd("wpctl set-volume -l 1 @DEFAULT_AUDIO_SINK@ 5%+"),
+_bind("XF86AudioRaiseVolume", hl.dsp.exec_cmd("wpctl set-volume -l 1 @DEFAULT_AUDIO_SINK@ 5%+"),
     { locked = true, repeating = true, desc = "音量を上げる" })
-hl.bind("XF86AudioLowerVolume", hl.dsp.exec_cmd("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-"),
+_bind("XF86AudioLowerVolume", hl.dsp.exec_cmd("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-"),
     { locked = true, repeating = true, desc = "音量を下げる" })
-hl.bind("XF86AudioMute", hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"),
+_bind("XF86AudioMute", hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"),
     { locked = true, repeating = true, desc = "出力ミュート切り替え" })
-hl.bind("XF86AudioMicMute", hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle"),
+_bind("XF86AudioMicMute", hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle"),
     { locked = true, repeating = true, desc = "マイクミュート切り替え" })
-hl.bind("XF86MonBrightnessUp", hl.dsp.exec_cmd("~/.config/hypr/scripts/bright.sh 5%+"),
+_bind("XF86MonBrightnessUp", hl.dsp.exec_cmd("~/.config/hypr/scripts/bright.sh 5%+"),
     { locked = true, repeating = true, desc = "画面輝度を上げる" })
-hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd("~/.config/hypr/scripts/bright.sh 5%-"),
+_bind("XF86MonBrightnessDown", hl.dsp.exec_cmd("~/.config/hypr/scripts/bright.sh 5%-"),
     { locked = true, repeating = true, desc = "画面輝度を下げる" })
 
-hl.bind("XF86AudioNext",  hl.dsp.exec_cmd("playerctl next"),       { locked = true, desc = "次の曲" })
-hl.bind("XF86AudioPause", hl.dsp.exec_cmd("playerctl play-pause"), { locked = true, desc = "再生/一時停止" })
-hl.bind("XF86AudioPlay",  hl.dsp.exec_cmd("playerctl play-pause"), { locked = true, desc = "再生/一時停止" })
-hl.bind("XF86AudioPrev",  hl.dsp.exec_cmd("playerctl previous"),   { locked = true, desc = "前の曲" })
+_bind("XF86AudioNext",  hl.dsp.exec_cmd("playerctl next"),       { locked = true, desc = "次の曲" })
+_bind("XF86AudioPause", hl.dsp.exec_cmd("playerctl play-pause"), { locked = true, desc = "再生/一時停止" })
+_bind("XF86AudioPlay",  hl.dsp.exec_cmd("playerctl play-pause"), { locked = true, desc = "再生/一時停止" })
+_bind("XF86AudioPrev",  hl.dsp.exec_cmd("playerctl previous"),   { locked = true, desc = "前の曲" })
 
 -- Window rules
-hl.window_rule({
-    name    = "opacity-apps",
-    match   = { class = "^(google-chrome|dev\\.duxlabs\\.files|org.pulseaudio.pavucontrol|nm-connection-editor|blueman-manager|Blueman-manager|org.gnome.FileRoller|org.fcitx.fcitx5-config-qt)$" },
-    opacity = 0.925,
-})
-
-
-
-hl.window_rule({
-    name    = "opacity-ghostty",
-    match   = { class = "^com\\.mitchellh\\.ghostty$" },
-    opacity = 1.0,
-})
-
+-- 透明度 (opacity) はアプリごとに指定しない: ウィンドウ全体の不透明度は
+-- DMS の dms/layout.lua (decoration.active_opacity / inactive_opacity) が
+-- 設定する。アプリごとに値を変えると GUI アプリ間で見た目がずれる。
 hl.window_rule({
     name  = "float-utils",
     match = { class = "^(authentication-agent|Rustdesk|org.pulseaudio.pavucontrol|nm-connection-editor|blueman-manager|Blueman-manager)$" },
@@ -431,7 +456,6 @@ hl.window_rule({
     float   = true,
     size    = "(monitor_w*0.5) (monitor_h*0.6)",
     center  = true,
-    opacity = 0.85,
 })
 
 hl.window_rule({
@@ -440,7 +464,6 @@ hl.window_rule({
     float   = true,
     size    = "(monitor_w*0.5) (monitor_h*0.6)",
     center  = true,
-    opacity = 0.85,
 })
 
 hl.window_rule({
@@ -480,13 +503,27 @@ hl.layer_rule({ name = "osd",                       match = { namespace = "dms:o
 hl.layer_rule({ name = "tooltip",                   match = { namespace = "dms:tooltip" },                  blur = false, ignore_alpha = 0.5 })
 hl.layer_rule({ name = "rofi",                      match = { namespace = "rofi" },                         blur = true,  ignore_alpha = 0.2 })
 
--- User / machine / DMS fragments, loaded last so they can override anything
--- above. DMS regenerates its own files; only host.lua / user.lua / local.conf
+-- DMS fragments, loaded last so they can override anything above.
+-- DMS regenerates its own files; only host.lua / user.lua / local.conf
 -- are meant to be edited (and git-managed).
+--
+-- colors  : 枠・グループバーなどの配色 (Settings → Wallpaper & colors)
+-- outputs : モニタ構成 (Settings → Displays)
+-- layout  : ウィンドウ不透明度・Blur 強度・角丸・gaps (Settings → Hyprland)
+-- input   : ポインタ / キーボード設定 (Settings → Input)
+-- windowrules : ウィンドウルール (Settings → Applications → Window rules)
+--
+-- dms/cursor.lua だけは読み込まない: カーソルは SKEL 側 (Bibata) と
+-- dconf / GTK の設定で揃える。取り込むと DMS 既定 (Adwaita) が env を
+-- 上書きし、コンポジタと GTK アプリと X11 アプリでカーソルがずれる。
+_dms("colors")
+_dms("outputs")
+_dms("layout")
+_dms("input")
+_dms("windowrules")
+
+-- User / machine fragments, loaded last so they can override anything above.
 _dofile(_HOME .. "/.config/hypr/workspaces.lua")
-_dofile(_HOME .. "/.config/hypr/dms/outputs.lua")
-_dofile(_HOME .. "/.config/hypr/dms/colors.lua")
-_dofile(_HOME .. "/.config/hypr/dms/windowrules.lua")
 _dofile(_HOME .. "/.config/hypr/sunshine.lua")
 _dofile(_HOME .. "/.config/hypr/host.lua")
 _dofile(_HOME .. "/.config/hypr/user.lua")

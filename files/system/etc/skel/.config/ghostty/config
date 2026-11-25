@@ -1,32 +1,19 @@
 # Ghostty Configuration
-# Alacritty の見た目を再現 + ネイティブタブ管理
+#
+# 配色と透明度は DMS (matugen) が生成するテーマに従う。
+#
+# Ghostty は「テーマ → この設定ファイル」の順に読み込むため、ここに
+# background / foreground / palette / background-opacity を書くと
+# DMS の設定 (Settings → Wallpaper & colors → App theming) が
+# 上書きされて反映されなくなる。配色は DMS 側で変更する (壁紙の
+# 変更に合わせて自動再生成される)。上書きしたい場合だけ下の
+# 該当行をコメントアウトして使う。
 
-# ── Colors (Alacritty から移植) ──
-background = #000000
-foreground = #ffffff
-
-palette = 0=#000000
-palette = 1=#ff0000
-palette = 2=#00ff00
-palette = 3=#ffff00
-palette = 4=#0080ff
-palette = 5=#ff00ff
-palette = 6=#00ffff
-palette = 7=#ffffff
-
-palette = 8=#808080
-palette = 9=#ff5555
-palette = 10=#55ff55
-palette = 11=#ffff55
-palette = 12=#5555ff
-palette = 13=#ff55ff
-palette = 14=#55ffff
-palette = 15=#ffffff
-
-cursor-color = #ffffff
-cursor-text = #000000
-selection-foreground = #000000
-selection-background = #ffffff
+# ── Theme (DMS が ~/.config/ghostty/themes/dankcolors に生成) ──
+# 端末の不透明度 (terminal opacity) が 100 未満のときだけ、
+# DMS が background-opacity をテーマファイルに書き込む。
+# 100 のときはこの設定がそのまま使われる (既定は不透明)。
+theme = dankcolors
 
 # ── Font ──
 # JetBrainsMono Nerd Font comes from the ririko66z COPR; Noto Sans Mono CJK JP
@@ -37,15 +24,17 @@ font-size = 12
 # ── Window ──
 window-padding-x = 0
 window-padding-y = 0
-background-opacity = 0.9
 gtk-titlebar = false
 window-decoration = none
 window-show-tab-bar = auto
+# ghostty テーマ: タイトルバーとタブバーも端末の配色 (DMS テーマ) に追従する。
+# window-titlebar-background / window-titlebar-foreground を指定すると
+# テーマの背景色・前景色より優先されるため、指定しない。
 window-theme = ghostty
-window-titlebar-background = #000000
-window-titlebar-foreground = #ffffff
 gtk-toolbar-style = flat
 gtk-tabs-location = bottom
+# タブバーの配色は CSS 変数 (var(--window-bg-color) など) で
+# テーマ値から導く。ハードコードすると DMS の配色とずれる。
 gtk-custom-css = ~/.config/ghostty/gtk.css
 
 # ── Cursor ──
@@ -57,7 +46,7 @@ term = xterm-256color
 confirm-close-surface = false
 mouse-hide-while-typing = true
 
-# Right-click belongs to Ghostty, not to the TUI or the desktop shell.
+# Right-click belongs to Ghostty, not the TUI or the desktop shell.
 # With the default `mouse-reporting = true`, a mouse-capturing TUI
 # (OpenCode / vim / lazygit) receives the right-click and selects part of
 # the line instead of letting Ghostty show its context menu. `false` keeps
