@@ -21,7 +21,7 @@ build="/var/tmp/sunshine-build"
 
 echo "==> Sunshine: installing build dependencies"
 dnf install -y --setopt=install_weak_deps=False \
-    cmake ninja-build gcc gcc-c++ git nodejs npm \
+    cmake ninja-build gcc gcc-c++ git nodejs nodejs-npm \
     python3 python3-pip python3-jinja2 \
     appstream glslc libappstream-glib desktop-file-utils \
     libcap-devel libcurl-devel libdrm-devel libevdev-devel libva-devel \
@@ -30,7 +30,7 @@ dnf install -y --setopt=install_weak_deps=False \
     mesa-libGL-devel mesa-libgbm-devel libgudev-devel \
     miniupnpc-devel numactl-devel opus-devel pulseaudio-libs-devel \
     openssl-devel pipewire-devel qt6-qtbase-devel qt6-qtsvg-devel \
-    vulkan-loader-devel systemd-udev wget which xz libatomic
+    vulkan-loader-devel systemd-udev wget2-wget which xz libatomic
 
 echo "==> Sunshine: fetching ${commit}"
 rm -rf "$src" "$build"

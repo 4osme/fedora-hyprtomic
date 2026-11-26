@@ -12,8 +12,9 @@ chmod +x /usr/libexec/hyprtomic/distrobox-host-dbus
 # skel helpers invoked directly by the user / Hyprland
 chmod +x /etc/skel/.local/bin/sunshine-session
 chmod +x /etc/skel/.config/sunshine/hypr-stream-display.py
-# wayblue bakes its own hyprland.conf into /etc/skel. HyprTomic dotfiles bring
-# their own (lua) config, so drop the stale file to avoid ambiguity.
+# Legacy: wayblue baked its own hyprland.conf into /etc/skel. HyprTomic
+# dotfiles bring their own (lua) config, so drop any stale file from images
+# built on the old base to avoid ambiguity.
 rm -f /etc/skel/.config/hypr/hyprland.conf
 
 # DMS must start inside the compositor session, not at login: dms.service has

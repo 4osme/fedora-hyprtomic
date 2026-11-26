@@ -1,11 +1,14 @@
 # fedora-hyprtomic &nbsp; [![bluebuild build badge](https://github.com/j7b3y/fedora-hyprtomic/actions/workflows/build.yml/badge.svg)](https://github.com/j7b3y/fedora-hyprtomic/actions/workflows/build.yml)
 
-A personal Fedora Atomic (wayblue) desktop image built around **DMS (Dux
-Modular Shell)**, with the GUI stack running natively on the host instead of in
-an Arch distrobox container.
+A personal Fedora Atomic desktop image built around **DMS (Dux Modular
+Shell)**, with the GUI stack running natively on the host instead of in an Arch
+distrobox container. It builds on the official minimal
+`quay.io/fedora-ostree-desktops/base-atomic:45` instead of wayblue, so the
+Hyprland stack is compiled from pinned sources in this repository.
 
-- **Host** — Fedora Atomic base, Hyprland/SDDM, DMS + quickshell, fcitx5 +
-  Mozkey IbG, dfiles, native Mission Center, and a JIS-patched Sunshine build.
+- **Host** — Fedora Atomic base, self-built Hyprland/SDDM, DMS + quickshell,
+  fcitx5 + Mozkey IbG, dfiles, native Mission Center, and a JIS-patched
+  Sunshine build.
 - **SKEL** — environment defaults baked into `/etc/skel` and synced into
   `$HOME` with `ujust sync-skel-config`.
 - **USR** — the user's own git repository, symlinked into `$HOME` with
@@ -21,11 +24,40 @@ manager and the streaming stack all run on the Fedora Atomic host.
 | Path | Purpose |
 |---|---|
 | `recipes/recipe.yml` | Host image (packages, COPRs, firstboot services, default flatpaks) |
+| `packages/hyprland/**` | Pinned Hyprland stack sources, specs and `build.sh` (see below) |
 | `files/system/**` | Files copied to `/` (skel, systemd units, PAM, SDDM theme overlay, ujust) |
 | `files/scripts/**` | Build-time scripts (Mozkey RPM, Sunshine source build, SDDM theme, finalize) |
+| `files/dnf/**` | COPR repo files; `hyprland-rpms/` is populated by CI (gitignored) |
 | `scripts/check.sh` | Linux/WSL checks that do not need a container build |
 | `docs/design/**` | Layer/design decisions (tracked) |
 | `AGENTS.md` | Architecture notes, conventions and change rules |
+
+## Hyprland stack (self-built)
+
+Fedora 45 does not ship a usable Hyprland stack: `hyprutils`, `hyprgraphics`,
+`hyprlang` and `hyprcursor` are too old, and `aquamarine`, `hyprwire`,
+`hyprtoolkit`, `xdg-desktop-portal-hyprland` and `hyprpolkitagent` are missing
+entirely. `packages/hyprland/` therefore vendors the wayblue specs and pins
+every source URL and SHA256 in `lock.yml`.
+
+`build.sh` verifies the lock, fetches the sources, runs `rpmbuild` in dependency
+order and creates a local RPM repository in `packages/hyprland/out/`. The image
+installs from that repository through `files/dnf/hyprland-local.repo`;
+`files/` is bind-mounted (not copied) during the build, so the RPMs never
+become an image layer.
+
+The `hyprland-rpms` CI job restores a cache keyed on `lock.yml`, `build.sh` and
+`specs/**`, rebuilds only on a miss, and uploads the RPMs as an artifact for
+the image job. To build locally:
+
+```bash
+podman run --rm -v "$PWD:/work:Z" -w /work fedora:45 bash packages/hyprland/build.sh
+rm -rf files/dnf/hyprland-rpms
+cp -a packages/hyprland/out files/dnf/hyprland-rpms
+```
+
+To bump a package, edit its entry and vendored spec, then run
+`packages/hyprland/update-lock.sh` to refresh the hashes.
 
 ## Installation
 

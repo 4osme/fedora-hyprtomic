@@ -21,6 +21,7 @@ crlf_targets=(
     files/system/etc/skel/.local/bin
     files/system/etc/skel/.config/sunshine
     files/system/usr/share/hyprtomic/sunshine/patches
+    packages/hyprland
 )
 for target in "${crlf_targets[@]}"; do
     [ -e "$target" ] || continue
@@ -36,7 +37,7 @@ if command -v python3 >/dev/null 2>&1 && python3 -c 'import yaml' >/dev/null 2>&
 import sys
 import yaml
 
-for path in ("recipes/recipe.yml",):
+for path in ("recipes/recipe.yml", "packages/hyprland/lock.yml"):
     with open(path, encoding="utf-8") as handle:
         yaml.safe_load(handle)
     print(f"ok    {path}")
@@ -49,6 +50,8 @@ fi
 echo "==> shellcheck"
 if command -v shellcheck >/dev/null 2>&1; then
     shellcheck -S warning -s bash files/scripts/*.sh || fail=1
+    shellcheck -S warning -s bash \
+        packages/hyprland/build.sh packages/hyprland/update-lock.sh || fail=1
     shellcheck -S warning -s bash \
         files/system/usr/libexec/hyprtomic/user-config \
         files/system/usr/libexec/hyprtomic/machine-config \

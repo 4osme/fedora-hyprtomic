@@ -42,7 +42,7 @@
 
 | コンポーネント | 旧配置 | 新レイヤ | 判定 | 備考 |
 |---|---|---|---|---|
-| wayblue hyprland base（hyprland / hyprlock / hypridle / portals / sddm） | base-image | IMG | 継続 | New Order でも土台は wayblue |
+| wayblue hyprland base（hyprland / hyprlock / hypridle / portals / sddm） | base-image | IMG | **置換** | 2026-11-26: 公式 `base-atomic:45` に移行。Hyprland 系は `packages/hyprland` で自前ビルド、SDDM は Fedora 公式 |
 | qt6-qtsvg / qtvirtualkeyboard / qtmultimedia / qt5compat | dnf | IMG | 継続 | SDDM テーマ依存 |
 | pipewire / pipewire-pulseaudio / wireplumber | dnf | IMG | 継続 | 音声基盤 |
 | NetworkManager / bluez | dnf | IMG | 継続 | DMS コントロールセンターが system bus 経由で利用 |
@@ -170,6 +170,49 @@
 | `finalize.sh` | 継続（整理） | dconf update 等 |
 | `.github/workflows/build.yml` | 継続 | GUI イメージ job を削除 |
 
+### 1.6 ベースイメージ移行: wayblue → 公式 base-atomic（2026-11-26）
+
+wayblue の Hyprland ベースをやめ、`quay.io/fedora-ostree-desktops/base-atomic:45`
+を土台にする。wayblue が追加していた GUI 基盤は次のように置き換える。
+
+| 旧 wayblue 提供 | F45 公式の状態 | New Order |
+|---|---|---|
+| hyprland（0.5x） | 無し（F45 は 0.4x 系の古い hyprutils/hyprgraphics のみ） | `packages/hyprland` で自前ビルド |
+| hyprlock / hypridle / hyprpolkitagent / portal | 無し | 同上（ポータルは `xdg-desktop-portal-gtk` と併用） |
+| aquamarine / hyprwire / hyprtoolkit / glaze | 無し | 同上 |
+| sddm + sddm-themes | 公式にある（0.21.0） | レシピで導入。F45 は greeter 表示サーバを分割しており、`sddm-wayland-generic`（weston）を明示 + `DisplayServer=wayland`。Xorg は入れない |
+| xwayland / xwayland-satellite | 公式にある | レシピで明示 |
+| NetworkManager / pipewire / polkit / bluez / upower / udisks2 | 公式にある | 変更なし |
+
+自前ビルドは次の 3 条件を満たす:
+
+1. **lockfile** — `packages/hyprland/lock.yml` が spec の出所コミット、各ソースの
+   URL/SHA256、ビルド順を持つ。`build.sh` は lock と一致しない成果物を捨てる。
+2. **バイナリキャッシュ** — CI の `hyprland-rpms` job が
+   `lock.yml` / `build.sh` / `specs/**` のハッシュで `out/` をキャッシュし、
+   変更が無ければ再ビルドせず artifact として渡す。
+3. **レイヤ非汚染** — BlueBuild は `files/` を `/tmp/files` に bind mount するため、
+   `files/dnf/hyprland-rpms/` の RPM はインストールされるがイメージ層に残らない。
+
+`verify-install.sh` が hyprland-git / portal / polkit agent / SDDM / DMS / IME の
+存在を確認し、どれか欠けたらビルドを失敗させる（`skip-unavailable: true` で
+黙って落ちるのを防ぐ）。
+
+F45 で判明したパッケージ差分:
+
+| F44 まで | F45 |
+|---|---|
+| `npm` | `nodejs-npm` |
+| `wget` | `wget2-wget` |
+| `google-roboto-flex-fonts` | 無し（`google-roboto-fonts` で代替） |
+| `sddm` 単体で greeter 表示サーバ込み | `sddm-wayland-generic` / `sddm-x11` の選択が必須 |
+
+2026-11-26 時点の検証: `fedora:45` コンテナで `build.sh` が完走し 13 個の
+ランタイム RPM を生成。そのローカル repo から `hyprland-git` / `hyprlock` /
+`hypridle` / `hyprpolkitagent` / `hyprland-qt-support` /
+`xdg-desktop-portal-hyprland` を `dnf install` して依存解決と主要ファイル
+（wayland-session、user unit、portal）を確認済み。
+
 ---
 
 ## 2. nixos-dotfiles
@@ -178,7 +221,7 @@
 
 | モジュール | 内容 | 新レイヤ | 判定 | 備考 |
 |---|---|---|---|---|
-| `desktop/hyprland.nix` | Hyprland + uwsm + xwayland | IMG | 継続 | wayblue base が提供 |
+| `desktop/hyprland.nix` | Hyprland + uwsm + xwayland | IMG | 継続 | `packages/hyprland` の自前ビルド + `xorg-x11-server-Xwayland`。uwsm は導入しない |
 | `system/sddm.nix` | SDDM テーマ + fingerprint PAM + fprintd | IMG | **移設** | テーマと PAM gate を RPM/ファイルで |
 | `system/locale.nix` | ja_JP、jp106、fcitx5 + mozkey | IMG | **移設（Mozkey）** | 上流の Fedora RPM を IMG に導入 |
 | `system/audio.nix` | PipeWire quantum/buffer 調整、rtkit | IMG | **移設（完了）** | `files/system/etc/pipewire/…`, `etc/wireplumber/…`, `etc/modprobe.d/…` に配置 |
@@ -303,8 +346,13 @@
 - duxlabs/dux-repo   # quickshell, matugen, dux-gop, dux-search,
                      # dux-calendar, dux-files, dux-icons,
                      # material-symbols-fonts, ghostty, qt6ct-kde
+- ublue-os/packages  # just, ublue-os-just（ujust 本体）
 - ririko66z/dots-hyprland  # bibata-cursor-theme（既存）
 ```
+
+- コンポジタ一式（hyprland-git, hyprlock, hypridle, hyprpolkitagent,
+  xdg-desktop-portal-hyprland, hyprland-qt-support, 依存ライブラリ）は
+  **COPR を使わず** `packages/hyprland` で自前ビルドする（1.6）。
 
 - `duxlabs/dux-repo` は Fedora 43/44/45 と EL10 を提供。F44 の x86_64 で quickshell / matugen / dux-* のビルドを確認済み（2026-11）。
 - `duxlabs/dms` の `dms.spec` は `Requires: (quickshell or quickshell-git)`、`Recommends: (dux-search or danksearch)`、`Recommends: (dux-gop or dgop)`。フルスイートはこの推奨群を明示的に入れる。
@@ -384,5 +432,5 @@ USR / HOST レイヤの詳細（rpm-ostree のレイヤ済みパッケージ・k
 2. ~~`recipes/recipe.yml` v2~~ 完了（2026-11-23）。COPR 2 本 + repo ファイル 1 本、DMS フルスイート、Mozkey（上流 RPM）、dfiles、`dms.service` を `hyprland-session.target` にバインド。`install-ghostty.sh` は COPR に置換して削除済み。
 3. ~~`files/system/etc/skel` の再構成~~ 完了（2026-11-23）。DMS 対応 `hyprland.lua`（include 構造・DMS IPC キーバインド・`dms:*` レイヤールール）、Mozkey profile、dfiles の MIME 既定、`hyprland-session.target`、壁紙 seed、nemo / Kvantum / quickshell ii / hyprbind の削除。
 4. ~~`sync-skel-config` v2 と `user-config-*` / `machine-*` の実装~~ 完了（2026-11-23）。設計は `docs/design/user-config-layer.md`。
-5. ~~カスタム RPM / COPR の検証~~ 一部完了（2026-11-23）: mozkey（RPM）、sunshine（JIS ソースビルド）、sddm-theme（QML オーバーレイ）、PAM gate を実装。hyprbind / hypremoji は廃止。
-6. VM（wayblue）でログイン → DMS 起動 → dfiles → IME → Sunshine（JIS / HEADLESS-1）→ SDDM 指紋ログインの順に検証。
+5. ~~カスタム RPM / COPR の検証~~ 一部完了（2026-11-23 / 2026-11-26）: mozkey（RPM）、sunshine（JIS ソースビルド）、sddm-theme（QML オーバーレイ）、PAM gate を実装。Hyprland 一式は `packages/hyprland` の lock + CI キャッシュで自前ビルド（1.6）。hyprbind / hypremoji は廃止。
+6. VM（base-atomic:45 + 自前 RPM）でログイン → DMS 起動 → dfiles → IME → Sunshine（JIS / HEADLESS-1）→ SDDM 指紋ログインの順に検証。

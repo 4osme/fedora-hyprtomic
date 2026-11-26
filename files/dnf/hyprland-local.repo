@@ -1,0 +1,14 @@
+[hyprtomic-hyprland-local]
+name=HyprTomic self-built Hyprland packages
+# Populated by the GitHub workflow from the hyprland-rpms job, or locally by
+# packages/hyprland/build.sh followed by:
+#   rm -rf files/dnf/hyprland-rpms
+#   cp -a packages/hyprland/out files/dnf/hyprland-rpms
+# The whole files/ tree is bind-mounted at /tmp/files during the image build,
+# so these RPMs are installed but never become an image layer.
+baseurl=file:///tmp/files/dnf/hyprland-rpms
+type=rpm-md
+enabled=1
+gpgcheck=0
+repo_gpgcheck=0
+skip_if_unavailable=0
