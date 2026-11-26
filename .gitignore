@@ -16,3 +16,6 @@ docs/*
 # GitHub workflow copies it to files/dnf/hyprland-rpms/ before BlueBuild runs.
 /packages/hyprland/out/
 /files/dnf/hyprland-rpms/
+# Artifacts from `bluebuild generate` / local podman builds.
+/.bluebuild-scripts_*
+/Containerfile.generated

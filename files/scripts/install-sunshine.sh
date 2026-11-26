@@ -56,6 +56,7 @@ cmake -B "$build" -G Ninja -S "$src" \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX=/usr \
     -DBUILD_DOCS=OFF \
+    -DBUILD_TESTS=OFF \
     -DBUILD_WERROR=OFF \
     -DSUNSHINE_ASSETS_DIR=/usr/share/sunshine \
     -DSUNSHINE_EXECUTABLE_PATH=/usr/bin/sunshine \
