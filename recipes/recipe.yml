@@ -1,7 +1,7 @@
 ---
 # yaml-language-server: $schema=https://schema.blue-build.org/recipe-v1.json
 name: fedora-hyprtomic
-description: Personal Fedora Atomic Hyprland image with DMS and the Mozkey IME
+description: Personal Fedora Atomic Hyprland image with DMS and Sweet IME
 
 # New Order: build on the official minimal Fedora Atomic base instead of
 # wayblue. The Hyprland stack is not in Fedora 45, so the GitHub workflow
@@ -47,9 +47,7 @@ modules:
   # the portal and the polkit agent are absent. packages/hyprland/lock.yml pins
   # the sources; hyprland-local.repo serves the cached RPMs to this module.
   #
-  # Mozkey IbG (the fcitx5 IME) is not in Fedora or a COPR. Upstream publishes
-  # an x86_64 Fedora RPM with the Fcitx5 frontend and the bundled Zenz runtime,
-  # so install-mozkey.sh fetches a pinned release and verifies its SHA256.
+  # install-sweet-ime.sh installs the pinned fcitx5 addon and settings GUI.
   #
   # quickshell comes from dux-repo, not Fedora, because DMS tracks quickshell
   # upstream faster than the distro package. `quickshell` is requested by its
@@ -192,8 +190,7 @@ modules:
         - adw-gtk3-theme
         - bibata-cursor-theme
 
-        # --- IME: fcitx5 + Mozkey IbG (upstream Fedora RPM, installed by
-        #     install-mozkey.sh). The RPM bundles its own Zenz runtime.
+        # --- IME: Sweet IME uses the native fcitx5 stack.
         - fcitx5
         - fcitx5-gtk
         - fcitx5-qt
@@ -271,7 +268,7 @@ modules:
   # 4. Build-time scripts (live in files/scripts/; reference by bare filename)
   - type: script
     scripts:
-      - install-mozkey.sh
+      - install-sweet-ime.sh
       - install-sunshine.sh
       - install-sddm-theme.sh
       - finalize.sh
@@ -303,7 +300,8 @@ modules:
       - notify: true
         scope: system
         install:
-          - org.mozilla.firefox
+          - com.google.Chrome
+          - io.github.flattool.Warehouse
           - org.gnome.Loupe
           - com.bitwarden.desktop
 

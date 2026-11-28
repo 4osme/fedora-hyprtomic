@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # HyprTomic USR layer: symlink a user-owned git repository into $HOME.
 #
-# The repository holds a `home/` directory that mirrors $HOME. Every file in it
+# The repository holds a `home/` directory that mirrors $HOME. Each registered config file
 # is symlinked, so edits in the repository are live immediately and `git diff`
 # shows exactly what changed. Files the image also ships (via /etc/skel) are
 # never touched by sync-skel-config once they are linked here.
@@ -20,9 +20,11 @@ die() { echo "user-config: $*" >&2; exit 1; }
 
 usage() {
     cat <<'EOF'
-usage: user-config <init|status|apply|update> [--dry-run] [--prune]
+usage: user-config <init|register FILE|list|status|apply|update> [--dry-run] [--prune]
 
   init    create the repository skeleton (git init included)
+  register FILE  copy a ~/.config or ~/.local file into home/ and git add it
+  list    list registered paths relative to $HOME
   status  show differences between the repository and $HOME
   apply   symlink <repo>/home into $HOME
   update  git pull --ff-only, then apply
@@ -37,21 +39,52 @@ EOF
 }
 
 repo_files() {
-    (cd "$repo/home" && find . -mindepth 1 ! -type d -printf '%P\n' | LC_ALL=C sort)
+    local path rel
+    git -C "$repo" ls-files -z -- home/.config/ home/.local/ | while IFS= read -r -d '' path; do
+        rel=${path#home/}
+        [[ "$rel" != *$'\n'* ]] || die "newline in registered path"
+        [ -f "$repo/$path" ] && [ ! -L "$repo/$path" ] || continue
+        check_path "$rel"
+        printf '%s\n' "$rel"
+    done | LC_ALL=C sort -u
+}
+
+check_path() {
+    local target="$HOME/$1" parent
+    parent=$(realpath -m -- "$(dirname "$target")")
+    [[ "$parent" == "$(realpath -m -- "$HOME")/${1%/*}" ]] || die "symlinked parent: $target"
+    case "$target/" in "$repo/"*|"$state_dir/"*) die "reserved path: $target" ;; esac
+}
+
+cmd_register() {
+    local dir target rel source
+    dir=$(realpath -e -- "$(dirname -- "$1")") || die "missing parent: $1"
+    target="$dir/$(basename -- "$1")"
+    case "$target" in "$HOME/.config/"*|"$HOME/.local/"*) ;; *) die "expected a file in ~/.config or ~/.local" ;; esac
+    rel=${target#"$HOME/"}
+    check_path "$rel"
+    source="$repo/home/$rel"
+    [ -f "$target" ] && [ ! -L "$target" ] || die "expected a regular file: $target"
+    [ -d "$repo/.git" ] || die "run user-config init first"
+    [[ $(realpath -m -- "$source") == "$(realpath -e -- "$repo")/home/$rel" ]] || die "symlinked source path"
+    if [ -e "$source" ]; then
+        cmp -s "$target" "$source" || die "different repository file already exists: $source"
+    else
+        mkdir -p "$(dirname "$source")"
+        cp -p -- "$target" "$source"
+    fi
+    git -C "$repo" add -- "home/$rel"
+    echo "registered $rel; run ujust user-config-apply"
 }
 
 cmd_init() {
-    if [ -d "$repo/home" ] && [ -n "$(repo_files)" ]; then
-        die "$repo already has a home/ tree; refusing to overwrite"
-    fi
-
-    mkdir -p "$repo/home/.config/hypr" "$repo/home/.local/bin"
+    mkdir -p "$repo/home/.config" "$repo/home/.local"
 
     if [ ! -f "$repo/README.md" ]; then
         cat >"$repo/README.md" <<'EOF'
 # hyprtomic-user
 
-Personal configuration for HyprTomic. Everything under `home/` is symlinked
+Personal configuration for HyprTomic. Tracked files under `home/.config/` and `home/.local/` are symlinked
 into `$HOME` by `ujust user-config-apply`.
 
 - `home/` mirrors `$HOME`. Add files there, not in the repository root.
@@ -77,35 +110,12 @@ EOF
 EOF
     fi
 
-    if [ ! -f "$repo/home/.config/hypr/user.lua" ]; then
-        cat >"$repo/home/.config/hypr/user.lua" <<'EOF'
--- HyprTomic user overrides.
--- Loaded last by ~/.config/hypr/hyprland.lua, after theme/workspaces/DMS.
--- Return a table to override the image defaults, or call hl.* directly.
-return {
-    -- monitor_primary = "DP-1",
-}
-EOF
-    fi
-
-    # OpenCode's TUI captures the mouse by default, which suppresses the
-    # terminal's native right-click menu. Disable it in the CLI settings.
-    mkdir -p "$repo/home/.config/opencode"
-    if [ ! -f "$repo/home/.config/opencode/cli.json" ]; then
-        cat >"$repo/home/.config/opencode/cli.json" <<'EOF'
-{
-  "$schema": "https://opencode.ai/v2/cli.json",
-  "mouse": false
-}
-EOF
-    fi
-
     if [ ! -d "$repo/.git" ]; then
         git -C "$repo" init -q
     fi
 
     echo "initialized $repo"
-    echo "next: edit home/, commit, then 'ujust user-config-apply'"
+    echo "next: register files, then 'ujust user-config-apply'"
 }
 
 cmd_status() {
@@ -175,7 +185,7 @@ cmd_apply() {
             [ -L "$target" ] || continue
             dest="$(readlink "$target")"
             case "$dest" in
-                "$repo/home/"*) ;;
+                "$repo/home/$rel") ;;
                 *) continue ;;
             esac
             if [ "$dry_run" = 1 ]; then
@@ -197,6 +207,7 @@ cmd_apply() {
             continue
         fi
 
+        [ ! -d "$target" ] || die "directory conflict: $target"
         if [ "$dry_run" = 1 ]; then
             if [ -e "$target" ] && [ ! -L "$target" ]; then
                 echo "would back up $target"
@@ -219,6 +230,9 @@ cmd_apply() {
 
     if [ "$dry_run" != 1 ]; then
         install -d "$state_dir"
+        if [ "$prune" = 0 ] && [ -f "$manifest_file" ]; then
+            LC_ALL=C sort -u -o "$new_manifest" "$manifest_file" "$new_manifest"
+        fi
         cp "$new_manifest" "$manifest_file"
     fi
 
@@ -231,6 +245,12 @@ cmd_update() {
     cmd_apply 0 0
 }
 
+export LC_ALL=C
+if [[ ${1:-} == register ]]; then
+    [[ $# == 2 ]] || die "usage: user-config register FILE"
+    cmd_register "$2"; exit
+fi
+if [[ ${1:-} == list ]]; then repo_files; exit; fi
 dry_run=0
 prune=0
 action=""

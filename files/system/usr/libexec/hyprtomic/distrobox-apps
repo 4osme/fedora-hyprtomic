@@ -33,59 +33,55 @@ state="${HYPRTOMIC_STATE:-}"
 host_state="/run/host${state}"
 tmp="${host_state}.new.$$"
 
-desktop_file_ok() {
-    f="$1"
-    grep -q '^NoDisplay=true' "$f" 2>/dev/null && return 1
-    grep -q '^Hidden=true' "$f" 2>/dev/null && return 1
-    grep -q '^Type=Link' "$f" 2>/dev/null && return 1
-    # Never re-export an entry that already routes through distrobox.
-    grep -qE '^Exec=.*(distrobox|host-spawn)' "$f" 2>/dev/null && return 1
-
-    first="$(sed -n 's/^Exec=//p' "$f" | head -n 1)"
-    [ -n "$first" ] || return 1
-    # Drop leading `env`/VAR=... assignments, quotes and field codes.
-    first="$(printf '%s' "$first" | sed -E 's/^((env|"([A-Za-z_][A-Za-z0-9_]*)=([^"]*))|[A-Za-z_][A-Za-z0-9_]*=("[^"]*"|[^[:space:]]*))[[:space:]]+//')"
-    bin="${first%% *}"
-    bin="${bin#\"}"
-    bin="${bin%\"}"
-    [ -n "$bin" ] || return 1
-    command -v "$bin" >/dev/null 2>&1 || return 1
-    return 0
-}
-
-{
-    for dir in /usr/share/applications /usr/local/share/applications "$HOME/.local/share/applications"; do
-        [ -d "$dir" ] || continue
-        for f in "$dir"/*.desktop; do
-            [ -f "$f" ] || continue
-            desktop_file_ok "$f" || continue
-            basename "$f"
-        done
-    done
-} | LC_ALL=C sort -u > "$tmp" || exit 1
-
-if [ -f "$host_state" ] && cmp -s "$host_state" "$tmp"; then
-    rm -f "$tmp"
-    printf 'unchanged\n'
-    exit 0
-fi
-
+# Use the exact source path: --app NAME does a fuzzy Name/Exec search and
+# misses desktop IDs that differ from the binary name (e.g. google-chrome).
+mkdir -p "$tmp.dir" || exit 1
+trap 'rm -rf "$tmp.dir" "$tmp" "$tmp.hash"' EXIT
+: > "$tmp"
+: > "$tmp.hash"
 failed=0
-while IFS= read -r app; do
-    [ -n "$app" ] || continue
-    distrobox-export --app "${app%.desktop}" >/dev/null 2>&1 || {
-        printf 'failed to export %s\n' "$app" >&2
-        failed=1
-    }
-done < "$tmp"
-
-if [ "$failed" -eq 0 ]; then
-    mv -f "$tmp" "$host_state"
-    printf 'updated %s apps\n' "$(wc -l < "$host_state")"
+changed=0
+old_ifs=$IFS
+IFS=:
+set -f
+set -- ${XDG_DATA_DIRS:-/usr/local/share:/usr/share}
+set +f
+IFS=$old_ifs
+for root in "${XDG_DATA_HOME:-$HOME/.local/share}" "$@"; do
+    case "$root" in /run/host/*|*/flatpak/exports/share) continue ;; esac
+    for f in "$root"/applications/*.desktop; do
+        [ -f "$f" ] || continue
+        id=${f##*/}
+        [ ! -e "$tmp.dir/$id" ] || continue
+        : > "$tmp.dir/$id"
+        grep -q '^Type=Application' "$f" || continue
+        grep -q '^Exec=' "$f" || continue
+        grep -qE '^(Hidden=true|Exec=.*(distrobox|host-spawn))' "$f" && continue
+        # NoDisplay handlers are still valid choices for xdg-open.
+        sum=$(cksum < "$f") || exit 1
+        row="$sum $id"
+        out="/run/host${HYPRTOMIC_APPS}/${HYPRTOMIC_NAME}-$id"
+        printf '%s\n' "$id" >> "$tmp"
+        printf '%s\n' "$row" >> "$tmp.hash"
+        if [ -f "$out" ] && grep -Fxq "$row" "$host_state.hash" 2>/dev/null; then
+            continue
+        fi
+        raw="/run/host${DISTROBOX_HOST_HOME:-$HOME}/.local/share/applications/${HYPRTOMIC_NAME}-$id"
+        if distrobox-export --app "$f" >/dev/null &&
+            { [ "$raw" = "$out" ] || mv -f "$raw" "$out"; } &&
+            sed -i "/^\[Desktop Entry\]$/a X-HyprTomic-Container=${HYPRTOMIC_NAME}" "$out"; then
+            changed=1
+        else
+            failed=1
+        fi
+    done
+done
+[ "$failed" -eq 0 ] || exit 1
+if [ "$changed" = 0 ] && cmp -s "$host_state" "$tmp"; then
+    echo unchanged
 else
-    # Keep the previous state so the next pass retries the failed entries.
-    rm -f "$tmp"
-    printf 'partial export (%s failed)\n' "$failed"
+    mv "$tmp" "$host_state" && mv "$tmp.hash" "$host_state.hash" || exit 1
+    echo updated
 fi
 INNER
 )
@@ -96,44 +92,13 @@ else
     ENTER_CMD=(distrobox enter -n)
 fi
 
-container_names() {
-    distrobox list --no-color 2>/dev/null | awk -F'|' '
-        NR > 1 {
-            name = $2
-            gsub(/^[ \t]+|[ \t]+$/, "", name)
-            if (name != "") print name
-        }'
-}
-
-running_container_names() {
-    distrobox list --no-color 2>/dev/null | awk -F'|' '
-        NR > 1 {
-            name = $2
-            status = $3
-            gsub(/^[ \t]+|[ \t]+$/, "", name)
-            gsub(/^[ \t]+|[ \t]+$/, "", status)
-            if (name != "" && status ~ /^Up/) print name
-        }'
-}
-
-# Add our marker to every export of this container so pruning can tell our
-# files apart from a user-created entry that happens to share the prefix.
-mark_exports() {
-    local name="$1" f
-    for f in "$APPS_DIR/${name}-"*.desktop; do
-        [ -f "$f" ] || continue
-        grep -q "^${MARKER}${name}$" "$f" && continue
-        sed -i "/^\[Desktop Entry\]$/a ${MARKER}${name}" "$f"
-    done
-}
-
 # Remove exports whose source .desktop file disappeared from the container.
 prune_container_exports() {
     local name="$1" state="$2" f base src
     [ -f "$state" ] || return 0
     for f in "$APPS_DIR/${name}-"*.desktop; do
         [ -f "$f" ] || continue
-        grep -q "^${MARKER}${name}$" "$f" || continue
+        grep -Fxq "${MARKER}${name}" "$f" || continue
         grep -qE '^Exec=.*(distrobox-enter|distrobox enter)' "$f" || continue
         base="$(basename "$f")"
         src="${base#"$name"-}"
@@ -153,6 +118,7 @@ prune_removed_containers() {
         [ -n "$name" ] || continue
         printf '%s\n' "$known" | grep -qxF "$name" && continue
         rm -f "$f"
+        dirty=1
         log "removed export of removed container '$name'"
     done
 }
@@ -162,7 +128,7 @@ sync_container() {
     mkdir -p "$STATE_DIR"
     # /dev/null is deliberate: distrobox-enter must not eat the loop's stdin.
     result="$(timeout 150 "${ENTER_CMD[@]}" "$name" -- \
-        env HYPRTOMIC_STATE="$state" sh -lc "$INNER_SCRIPT" </dev/null 2>&1)" || {
+        env HYPRTOMIC_STATE="$state" HYPRTOMIC_APPS="$APPS_DIR" HYPRTOMIC_NAME="$name" sh -lc "$INNER_SCRIPT" </dev/null 2>&1)" || {
             log "container '$name' did not answer: $result"
             return 1
         }
@@ -171,12 +137,11 @@ sync_container() {
             return 0
             ;;
         updated*)
-            mark_exports "$name"
+            dirty=1
             prune_container_exports "$name" "$state"
             log "$name: $result"
             ;;
         partial*)
-            mark_exports "$name"
             log "$name: $result"
             ;;
         *)
@@ -188,21 +153,25 @@ sync_container() {
 
 sync() {
     command -v distrobox >/dev/null 2>&1 || { log "distrobox not found; skipping"; return 1; }
-    local all running c
-    all="$(container_names)"
-    # No container list means podman/distrobox is not answering. Do not prune
-    # from an empty list: that would delete every export.
-    [ -n "$all" ] || { log "no containers reported; skipping"; return 1; }
+    mkdir -p "$STATE_DIR"
+    local lock
+    exec {lock}>"$STATE_DIR/sync.lock"
+    flock -n "$lock" || return 0
+    local all running c listing dirty=0
+    listing="$(distrobox list --no-color)" || return 1
+    all="$(awk -F' *\\| *' 'NR > 1 && NF >= 3 { print $2 }' <<< "$listing")"
+    # A successful header-only listing means the last box was removed.
+    [[ "$listing" == *'|'* ]] || return 1
 
     mkdir -p "$APPS_DIR" "$STATE_DIR"
-    running="$(running_container_names)"
+    running="$(awk -F' *\\| *' 'NR > 1 && $3 ~ /^Up/ { print $2 }' <<< "$listing")"
     while IFS= read -r c; do
         [ -n "$c" ] || continue
         sync_container "$c" || true
     done <<< "$running"
 
     prune_removed_containers "$all"
-    if command -v update-desktop-database >/dev/null 2>&1; then
+    if ((dirty)) && command -v update-desktop-database >/dev/null 2>&1; then
         update-desktop-database "$APPS_DIR" >/dev/null 2>&1 || true
     fi
 }
@@ -212,7 +181,7 @@ watch() {
     exec 9>"${STATE_DIR}/watch.lock"
     flock -n 9 || { log "another watcher is already running; exiting"; return 0; }
     while :; do
-        sync || true
+        (sync) || true
         sleep "$INTERVAL"
     done
 }

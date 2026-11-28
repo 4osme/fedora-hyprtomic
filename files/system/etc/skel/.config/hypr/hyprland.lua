@@ -118,12 +118,12 @@ hl.env("XCURSOR_SIZE", "36")
 hl.env("XDG_CURRENT_DESKTOP", "Hyprland")
 hl.env("XDG_SESSION_TYPE", "wayland")
 hl.env("XDG_SESSION_DESKTOP", "Hyprland")
--- IME: fcitx5 + Mozkey run on the host (the image ships them), so GTK/Qt apps
--- reach the IME through these variables.
-hl.env("GTK_IM_MODULE", "fcitx")
-hl.env("QT_IM_MODULE", "fcitx")
+-- Prefer native Wayland text input; use xcb if a Qt build lacks Wayland.
+-- Empty module overrides also clear stale values in the activation environment.
+hl.env("QT_QPA_PLATFORM", "wayland;xcb")
+hl.env("QT_IM_MODULE", "")
+hl.env("GTK_IM_MODULE", "")
 hl.env("XMODIFIERS", "@im=fcitx")
-hl.env("INPUT_METHOD", "fcitx")
 
 -- Autostart
 -- DMS (bar / launcher / control center / notifications / power menu / OSD)
@@ -131,12 +131,9 @@ hl.env("INPUT_METHOD", "fcitx")
 -- image. Start the target after exporting the environment so DMS can see
 -- WAYLAND_DISPLAY. IME (fcitx5) starts from its XDG autostart entry.
 hl.on("hyprland.start", function()
-    hl.exec_cmd("dbus-update-activation-environment --systemd --all")
+    hl.exec_cmd([[sh -c 'dbus-update-activation-environment --systemd --all; systemctl --user start graphical-session.target hyprland-session.target']])
     hl.exec_cmd("/usr/libexec/hyprtomic/seed-dms-wallpaper")
-    hl.exec_cmd("systemctl --user start graphical-session.target")
-    hl.exec_cmd("systemctl --user start hyprland-session.target")
     hl.exec_cmd("hyprpolkitagent")
-    hl.exec_cmd("systemctl --user import-environment QT_QPA_PLATFORMTHEME GTK_IM_MODULE QT_IM_MODULE XMODIFIERS")
     hl.exec_cmd("hypridle")
     hl.exec_cmd("gnome-keyring-daemon --start --components=secrets,pkcs11,ssh")
     hl.exec_cmd("hyprctl setcursor Bibata-Modern-Classic 36")
@@ -144,7 +141,6 @@ hl.on("hyprland.start", function()
     -- the host font caches, so the host fonts (CJK included) stay invisible
     -- and Japanese renders as tofu. Writes a per-app fontconfig fix.
     hl.exec_cmd("/usr/libexec/hyprtomic/flatpak-fonts")
-    hl.exec_cmd("sleep 2 && dbus-update-activation-environment --systemd DISPLAY WAYLAND_DISPLAY XDG_CURRENT_DESKTOP")
 end)
 
 -- General

@@ -72,7 +72,7 @@ hyprtomic-user/                  # git リポジトリ
         └── bin/
 ```
 
-- `home/` の**ファイルはすべて symlink**。ディレクトリは `mkdir -p` してからリンクする。
+- `home/.config/` と `home/.local/` の **Git に登録した通常ファイルだけを symlink**。ディレクトリは `mkdir -p` してからリンクする。
 - リポジトリ直下（`.git`、`README.md` など）はリンク対象にしない。
 - アプリが実行時に書き換えるファイル（`~/.config/fcitx5/profile` など）を symlink すると、
   変更がリポジトリにそのまま現れる。これは「設定の変更が git に見える」利点でもあるが、
@@ -130,6 +130,7 @@ hyprtomic-user/                  # git リポジトリ
 | コマンド | 動作 |
 |---|---|
 | `ujust user-config-init` | `~/.config/hyprtomic-user` の雛形を作る（`git init` 含む） |
+| `ujust user-config-register FILE` | 既存ファイルをリポジトリにコピーし `git add` する |
 | `ujust user-config-status` | リンクの欠落・張り替え・競合を表示 |
 | `ujust user-config-apply` | `home/` を `$HOME` に symlink する |
 | `ujust dry_run=1 user-config-apply` | 変更内容の表示のみ |
@@ -149,7 +150,7 @@ hyprtomic-user/                  # git リポジトリ
 ### 適用アルゴリズム（`user-config-apply`）
 
 1. リポジトリのルートを解決（既定パス or `HYPRTOMIC_USER_DIR`）。
-2. `home/` 配下のファイル一覧を取得し、前回の manifest と比較。
+2. 登録済みファイル一覧を取得し、前回の manifest と比較。
 3. `prune=1` のとき、前回リンクしたが今回消えたパスを、**リンク先がリポジトリを指している場合のみ**削除。
 4. 各ファイルについて:
    - 親ディレクトリを `mkdir -p`。
@@ -183,7 +184,7 @@ hyprtomic-user/                  # git リポジトリ
 
 - SKEL は「配るだけ」。USR が常に勝つ。
 - `sync-skel-config` は次を**除外**する。
-  - `hyprtomic-user/home/` に存在する相対パス
+  - 登録済みファイルの相対パス
   - `~/.config/hypr/user.lua`
   - `~/.config/hypr/workspaces.lua`
   - `~/.config/hypr/local.conf`

@@ -38,7 +38,13 @@ require_file /usr/lib/systemd/system/sddm.service
 require_pkg dms
 require_pkg quickshell
 require_pkg fcitx5
-require_pkg mozkey-ibg
+require_file /usr/lib64/fcitx5/sweetime.so
+require_file /usr/lib64/fcitx5/sweetui.so
+require_file /usr/share/fcitx5/inputmethod/sweetime.conf
+require_file /usr/share/sweet-ime/system.dict
+require_file /usr/bin/sweet-zenz-pack
+require_file /usr/share/sweet-ime/get-zenz.sh
+require_file /usr/bin/sweet-settings
 require_pkg ublue-os-just
 require_file /usr/share/ublue-os/just/60-custom.just
 
