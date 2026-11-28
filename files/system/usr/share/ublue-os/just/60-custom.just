@@ -32,8 +32,8 @@ sync-skel-config:
     # Paths the USR layer owns (symlinked by user-config-apply) and paths that
     # are always user-owned. rsync patterns are anchored at the transfer root.
     {
-        if [ -d "$user_dir/home" ]; then
-            (cd "$user_dir/home" && find . -mindepth 1 ! -type d -printf '/%P\n')
+        if [ -d "$user_dir/.git" ]; then
+            /usr/libexec/hyprtomic/user-config list | sed 's|^|/|'
         fi
         printf '%s\n' \
             '/.config/hypr/user.lua' \
@@ -92,7 +92,11 @@ user-config-init:
 user-config-status:
     @/usr/libexec/hyprtomic/user-config status
 
-# Symlink ~/.config/hyprtomic-user/home into $HOME.
+# Register an existing file for the next apply.
+user-config-register file:
+    @/usr/libexec/hyprtomic/user-config register {{quote(file)}}
+
+# Link registered files into ~/.config and ~/.local.
 # Pass dry_run=1 to preview, prune=1 to drop links the repository removed.
 user-config-apply:
     #!/usr/bin/env bash

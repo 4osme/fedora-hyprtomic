@@ -1,11 +1,14 @@
 # fedora-hyprtomic &nbsp; [![bluebuild build badge](https://github.com/j7b3y/fedora-hyprtomic/actions/workflows/build.yml/badge.svg)](https://github.com/j7b3y/fedora-hyprtomic/actions/workflows/build.yml)
 
-A personal Fedora Atomic (wayblue) desktop image built around **DMS (Dux
-Modular Shell)**, with the GUI stack running natively on the host instead of in
-an Arch distrobox container.
+A personal Fedora Atomic desktop image built around **DMS (Dux Modular
+Shell)**, with the GUI stack running natively on the host instead of in an Arch
+distrobox container. It builds on the official minimal
+`quay.io/fedora-ostree-desktops/base-atomic:45` instead of wayblue, so the
+Hyprland stack is compiled from pinned sources in this repository.
 
-- **Host** — Fedora Atomic base, Hyprland/SDDM, DMS + quickshell, fcitx5 +
-  Mozkey IbG, dfiles, native Mission Center, and a JIS-patched Sunshine build.
+- **Host** — Fedora Atomic base, self-built Hyprland/SDDM, DMS + quickshell,
+  fcitx5 + Sweet IME, dfiles, native Mission Center, and a JIS-patched
+  Sunshine build.
 - **SKEL** — environment defaults baked into `/etc/skel` and synced into
   `$HOME` with `ujust sync-skel-config`.
 - **USR** — the user's own git repository, symlinked into `$HOME` with
@@ -21,11 +24,40 @@ manager and the streaming stack all run on the Fedora Atomic host.
 | Path | Purpose |
 |---|---|
 | `recipes/recipe.yml` | Host image (packages, COPRs, firstboot services, default flatpaks) |
+| `packages/hyprland/**` | Pinned Hyprland stack sources, specs and `build.sh` (see below) |
 | `files/system/**` | Files copied to `/` (skel, systemd units, PAM, SDDM theme overlay, ujust) |
-| `files/scripts/**` | Build-time scripts (Mozkey RPM, Sunshine source build, SDDM theme, finalize) |
+| `files/scripts/**` | Build-time scripts (Sweet IME, Sunshine source build, SDDM theme, finalize) |
+| `files/dnf/**` | COPR repo files; `hyprland-rpms/` is populated by CI (gitignored) |
 | `scripts/check.sh` | Linux/WSL checks that do not need a container build |
 | `docs/design/**` | Layer/design decisions (tracked) |
 | `AGENTS.md` | Architecture notes, conventions and change rules |
+
+## Hyprland stack (self-built)
+
+Fedora 45 does not ship a usable Hyprland stack: `hyprutils`, `hyprgraphics`,
+`hyprlang` and `hyprcursor` are too old, and `aquamarine`, `hyprwire`,
+`hyprtoolkit`, `xdg-desktop-portal-hyprland` and `hyprpolkitagent` are missing
+entirely. `packages/hyprland/` therefore vendors the wayblue specs and pins
+every source URL and SHA256 in `lock.yml`.
+
+`build.sh` verifies the lock, fetches the sources, runs `rpmbuild` in dependency
+order and creates a local RPM repository in `packages/hyprland/out/`. The image
+installs from that repository through `files/dnf/hyprland-local.repo`;
+`files/` is bind-mounted (not copied) during the build, so the RPMs never
+become an image layer.
+
+The `hyprland-rpms` CI job restores a cache keyed on `lock.yml`, `build.sh` and
+`specs/**`, rebuilds only on a miss, and uploads the RPMs as an artifact for
+the image job. To build locally:
+
+```bash
+podman run --rm -v "$PWD:/work:Z" -w /work fedora:45 bash packages/hyprland/build.sh
+rm -rf files/dnf/hyprland-rpms
+cp -a packages/hyprland/out files/dnf/hyprland-rpms
+```
+
+To bump a package, edit its entry and vendored spec, then run
+`packages/hyprland/update-lock.sh` to refresh the hashes.
 
 ## Installation
 
@@ -57,17 +89,32 @@ ujust overwrite=1 sync-skel-config    # replace managed files, prune removed one
 
 The SKEL layer never touches files owned by the user repository
 (`~/.config/hypr/user.lua`, `workspaces.lua`, `host.lua`, `local.conf`, and
-anything under `~/.config/hyprtomic-user/home/`).
+files registered in `~/.config/hyprtomic-user/home/`).
 
 ## User configuration (USR)
 
 ```bash
 ujust user-config-init                # create ~/.config/hyprtomic-user (git repo)
-ujust user-config-apply               # symlink home/ into $HOME
+ujust user-config-register ~/.config/hypr/user.lua  # copy and git add an existing file
+ujust user-config-apply               # link tracked regular files under home/{.config,.local}
 ujust user-config-status              # check for drift
 ujust prune=1 user-config-apply       # drop links the repository removed
 ujust user-config-update              # git pull --ff-only, then apply
 ```
+
+### Wayland input methods
+
+Sweet IME works with its system dictionary out of the box. To enable neural
+conversion, open **Sweet IME Settings** (`sweet-settings`) and download a
+model for your user account. When upgrading from Mozkey, replace its entry
+with Sweet IME (`sweetime`) in `fcitx5-configtool`.
+
+Hyprland prefers the Wayland backend for Qt and leaves Qt and GTK free to
+select their native input contexts. X11 clients can use `XMODIFIERS=@im=fcitx`.
+The session exports its environment before starting the DMS target so tray
+actions and launcher entries inherit the same defaults as terminal commands.
+After updating an existing `hyprland.lua`, log out and back in: reloading the
+compositor does not change the environment of running applications.
 
 ## Machine state (HOST)
 
@@ -110,6 +157,10 @@ GUI apps installed inside a distrobox are registered with the host launcher
 - `ujust refresh-distrobox-apps` triggers a scan immediately.
 - `ujust distrobox-app-hooks <container>` installs an apt/pacman/apk hook for
   instant refresh after a package transaction (dnf is covered by the watcher).
+  It also routes `xdg-open` in that box through the host. To select Chrome
+  from a box named `work`, run `xdg-settings set default-web-browser
+  work-google-chrome.desktop` on the host after the first refresh. Use
+  `xdg-mime query default x-scheme-handler/https` to check the association.
 - `ujust distrobox-host-dbus <container>` (or `all`) points the container at the
   host system bus via `/run/host/run/dbus/system_bus_socket`. This is required
   for Bluetooth passkeys in containerised Chrome and for `bluetoothctl`/`nmcli`

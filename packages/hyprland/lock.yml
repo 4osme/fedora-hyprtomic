@@ -1,0 +1,193 @@
+# Pinned inputs for the self-built Hyprland RPM set.
+#
+# This file is the build lock for packages/hyprland/build.sh and the
+# GitHub Actions cache key. Every source tarball is verified against the
+# sha256 below; every vendored spec is verified too. Bump versions and
+# regenerate the hashes with: packages/hyprland/update-lock.sh
+
+version: 1
+fedora: 45
+arch: x86_64
+spec_source:
+  repo: https://github.com/wayblueorg/hyprlandRPM
+  commit: d603f3189987d809f8ba0eca88db324dada931ef
+
+# Build order: every entry lists its build deps before it is built.
+packages:
+  - name: glaze
+    rpm: glaze
+    version: "9.1.0"
+    spec: specs/glaze/glaze.spec
+    spec_sha256: ee60453470991d25cc93fed4cc5f857abb2f543ee653ee17cd216861e5ce9229
+    sources:
+      - name: glaze-9.1.0.tar.gz
+        url: https://github.com/stephenberry/glaze/archive/v9.1.0/glaze-9.1.0.tar.gz
+        sha256: 55f8a675397c505f9bee6c160e1c26b0085868f185d04d7a7727531fdbff4bd4
+
+  - name: hyprutils
+    rpm: hyprutils
+    version: "0.14.3"
+    spec: specs/hyprutils/hyprutils.spec
+    spec_sha256: 509e22c7a2d08bb7e0015d70297b6aa7e1ebc458d281ec2bde3cf8d3b8883c23
+    sources:
+      - name: hyprutils-0.14.3.tar.gz
+        url: https://github.com/hyprwm/hyprutils/archive/v0.14.3/hyprutils-0.14.3.tar.gz
+        sha256: 87bbfc9549ed96316b0d592c16d01f58729b23a2999a5293b73eec620b40c5f5
+
+  - name: hyprwayland-scanner
+    rpm: hyprwayland-scanner
+    version: "0.4.6"
+    spec: specs/hyprwayland-scanner/hyprwayland-scanner.spec
+    spec_sha256: af4d7363db3816473ddbf847e1953f9686304800c30fe7ee31708337c205e563
+    sources:
+      - name: hyprwayland-scanner-0.4.6.tar.gz
+        url: https://github.com/hyprwm/hyprwayland-scanner/archive/v0.4.6/hyprwayland-scanner-0.4.6.tar.gz
+        sha256: 05f55fd1a20d8ca81b5030980fdb7c87147749230145bdb3745af2741d617f5c
+
+  - name: hyprland-protocols
+    rpm: hyprland-protocols
+    version: "0.8.0"
+    spec: specs/hyprland-protocols/hyprland-protocols.spec
+    spec_sha256: 4f7110a0539b19cc8abf048fbbe6860b649f8d56a1bc691445e8be3985c68f30
+    sources:
+      - name: hyprland-protocols-0.8.0.tar.gz
+        url: https://github.com/hyprwm/hyprland-protocols/archive/v0.8.0/hyprland-protocols-0.8.0.tar.gz
+        sha256: e41ab206d89259fdf2059fdc523c39133e23ed9efa8b0ef0de9aeed61be96e72
+
+  - name: aquamarine
+    rpm: aquamarine
+    version: "0.16.0"
+    spec: specs/aquamarine/aquamarine.spec
+    spec_sha256: 11244bb6fe5b0348f817441325de64df3311ab47eacb651c7595549ad3b35a8d
+    sources:
+      - name: aquamarine-0.16.0.tar.gz
+        url: https://github.com/hyprwm/aquamarine/archive/v0.16.0/aquamarine-0.16.0.tar.gz
+        sha256: 42339c3096c9de6582c0d71bc86b7e63334a3faf6a2b917d385ad093caf66c3c
+
+  - name: hyprgraphics
+    rpm: hyprgraphics
+    version: "0.6.0"
+    spec: specs/hyprgraphics/hyprgraphics.spec
+    spec_sha256: 6da3e545474dec36bce2e25f062b2727e3faca40aef65ed73030122609a3a6e5
+    sources:
+      - name: hyprgraphics-0.6.0.tar.gz
+        url: https://github.com/hyprwm/hyprgraphics/archive/v0.6.0/hyprgraphics-0.6.0.tar.gz
+        sha256: 27e9e19ff59ba75a2963d72c3dcb5c0840b266b90d7fca6d5df7cac105419b08
+
+  - name: hyprlang
+    rpm: hyprlang
+    version: "0.6.8"
+    spec: specs/hyprlang/hyprlang.spec
+    spec_sha256: c81bc69399e7f6cdf7388896b68cf7be8dd3bfced4b35f6c49fa3c554493005c
+    sources:
+      - name: hyprlang-0.6.8.tar.gz
+        url: https://github.com/hyprwm/hyprlang/archive/v0.6.8/hyprlang-0.6.8.tar.gz
+        sha256: d10a0778b646e04d83e8b90cc0f764fb96958c01a15c3c0678d95a40fc647ed5
+
+  - name: hyprwire
+    rpm: hyprwire
+    version: "0.3.1"
+    spec: specs/hyprwire/hyprwire.spec
+    spec_sha256: dda074f4dffe72f615bba76163828c1f0d411e93a1e3631850724c0d387d9451
+    sources:
+      - name: hyprwire-0.3.1.tar.gz
+        url: https://github.com/hyprwm/hyprwire/archive/v0.3.1/hyprwire-0.3.1.tar.gz
+        sha256: 92a673d40ae6a7d66fbcd0a34ec071e026e17eaeeb0040c3375e4b2a80dba737
+
+  - name: hyprcursor
+    rpm: hyprcursor
+    version: "0.1.13"
+    spec: specs/hyprcursor/hyprcursor.spec
+    spec_sha256: 94e34a45231e038a16bb51e4933309a3bc7715edee379ccf45bf2e6fc1cbd389
+    sources:
+      - name: hyprcursor-0.1.13.tar.gz
+        url: https://github.com/hyprwm/hyprcursor/archive/v0.1.13/hyprcursor-0.1.13.tar.gz
+        sha256: 82af8b2ce27242ffdd6baebaa71b3f6c8665dc25c52bfcfccc16912622896af8
+
+  - name: hyprtoolkit
+    rpm: hyprtoolkit
+    version: "0.6.0"
+    spec: specs/hyprtoolkit/hyprtoolkit.spec
+    spec_sha256: 3e6d0361995bf3a1a4b0623171e5858d38882b3d020262e9ee93b663072a97f6
+    sources:
+      - name: hyprtoolkit-0.6.0.tar.gz
+        url: https://github.com/hyprwm/hyprtoolkit/archive/v0.6.0/hyprtoolkit-0.6.0.tar.gz
+        sha256: 53c41be72af97d9ede274a63c9c1034c58726d862905763ed6e5a564ae42ba6b
+
+  - name: hyprland
+    rpm: hyprland-git
+    version: "0.57.1^5.git151b043"
+    spec: specs/hyprland-git/hyprland-git.spec
+    spec_sha256: f0ad246f8ea4f242b406c18f2dbcd53dae34f48f9011fe0326ef9795935d7caf
+    local:
+      - path: specs/hyprland-git/macros.hyprland
+        sha256: 89560caa2b64491cce4eba94b6e9c8c038dde4eb386e2727191ae455659e62d8
+    sources:
+      - name: hyprland-git-151b043.tar.gz
+        url: https://github.com/hyprwm/Hyprland/archive/151b0434114fad482e4fed9438c081b46e73423c/hyprland-git-151b043.tar.gz
+        sha256: bb374ccf91851b5ef3d548867f8758ca12a7d1c799a06a091385939e4c42f39a
+      - name: udis86-5336633.tar.gz
+        url: https://github.com/canihavesomecoffee/udis86/archive/5336633af70f3917760a6d441ff02d93477b0c86/udis86-5336633.tar.gz
+        sha256: 2f459fafa19535ef1be417bf7614e4f92475e5787d7ba76df20287cc29d1b5a9
+
+  - name: hyprland-qt-support
+    rpm: hyprland-qt-support
+    version: "0.1.0"
+    spec: specs/hyprland-qt-support/hyprland-qt-support.spec
+    spec_sha256: e2a17cd3b88d4edae22841bea7dfc14f4c145b4789d51fc4c66c77372084ab93
+    local:
+      - path: specs/hyprland-qt-support/cmake.patch
+        sha256: fcc49669c041a5a288f216c993c3fcd69b112f5f70709ffc98668c3e12c57552
+    sources:
+      - name: hyprland-qt-support-0.1.0.tar.gz
+        url: https://github.com/hyprwm/hyprland-qt-support/archive/v0.1.0/hyprland-qt-support-0.1.0.tar.gz
+        sha256: cac1f980bd088b890097f3f999cfdf03e73ee94c53f3c92d0b3bc23baa9e7b2c
+
+  - name: xdg-desktop-portal-hyprland
+    rpm: xdg-desktop-portal-hyprland
+    version: "1.5.0"
+    spec: specs/xdg-desktop-portal-hyprland/xdg-desktop-portal-hyprland.spec
+    spec_sha256: a2dba797b39c63f02e88f37c4bb1c7098aae1b2915898416f493cae256c77276
+    sources:
+      - name: xdg-desktop-portal-hyprland-1.5.0.tar.gz
+        url: https://github.com/hyprwm/xdg-desktop-portal-hyprland/archive/v1.5.0/xdg-desktop-portal-hyprland-1.5.0.tar.gz
+        sha256: 8f9eddad706b0bbca2dc24f9894e07969ec5aed163249d6eac3932cfaf38e6a9
+      - name: sdbus-2.1.0.tar.gz
+        url: https://github.com/Kistler-Group/sdbus-cpp/archive/v2.1.0/sdbus-2.1.0.tar.gz
+        sha256: 6025e5dc6cddd532ff960d14e68ced5f42a1916b23a73fea6bcb437f06992eaf
+
+  - name: hyprpolkitagent
+    rpm: hyprpolkitagent
+    version: "0.2.0"
+    spec: specs/hyprpolkitagent/hyprpolkitagent.spec
+    spec_sha256: 506f9548a30098549a9144c318f9e28cb6227ad8c8edf2b61baad52e35302dae
+    sources:
+      - name: hyprpolkitagent-0.2.0.tar.gz
+        url: https://github.com/hyprwm/hyprpolkitagent/archive/v0.2.0/hyprpolkitagent-0.2.0.tar.gz
+        sha256: dcb1147e28efe03f308513f9dad69ab54e3cb9eca38795c4498d968b4f5ec602
+
+  - name: hyprlock
+    rpm: hyprlock
+    version: "0.9.7"
+    spec: specs/hyprlock/hyprlock.spec
+    spec_sha256: 8316abb795af6317b26792da0903d1bcec8e7eb8c252cc062cfebd2cc414c957
+    sources:
+      - name: hyprlock-0.9.7.tar.gz
+        url: https://github.com/hyprwm/hyprlock/archive/v0.9.7/hyprlock-0.9.7.tar.gz
+        sha256: 01145790570ffabd31e9b528c517bdccae76f36e72d733f00c2696d9c3bf2c88
+      - name: sdbus-2.1.0.tar.gz
+        url: https://github.com/Kistler-Group/sdbus-cpp/archive/v2.1.0/sdbus-2.1.0.tar.gz
+        sha256: 6025e5dc6cddd532ff960d14e68ced5f42a1916b23a73fea6bcb437f06992eaf
+
+  - name: hypridle
+    rpm: hypridle
+    version: "0.1.8"
+    spec: specs/hypridle/hypridle.spec
+    spec_sha256: 4e81965771bb87d97260acd1a5ad845c8bbc89456822f1653b20b5fd2a9baf22
+    sources:
+      - name: hypridle-0.1.8.tar.gz
+        url: https://github.com/hyprwm/hypridle/archive/v0.1.8/hypridle-0.1.8.tar.gz
+        sha256: 08703613cc33cc796c2179bcaa6076e8618113f67b938daaf7535f90c7d39595
+      - name: sdbus-2.1.0.tar.gz
+        url: https://github.com/Kistler-Group/sdbus-cpp/archive/v2.1.0/sdbus-2.1.0.tar.gz
+        sha256: 6025e5dc6cddd532ff960d14e68ced5f42a1916b23a73fea6bcb437f06992eaf

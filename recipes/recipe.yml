@@ -1,17 +1,22 @@
 ---
 # yaml-language-server: $schema=https://schema.blue-build.org/recipe-v1.json
 name: fedora-hyprtomic
-description: Personal Fedora Atomic Hyprland image (wayblue base) with DMS and the Mozkey IME
+description: Personal Fedora Atomic Hyprland image with DMS and Sweet IME
 
-base-image: ghcr.io/wayblueorg/hyprland
-image-version: latest # wayblue's only supported tag; tracks current Fedora stable
+# New Order: build on the official minimal Fedora Atomic base instead of
+# wayblue. The Hyprland stack is not in Fedora 45, so the GitHub workflow
+# builds it from the repo-pinned inputs in packages/hyprland/ (lock.yml) and
+# the recipe installs those cached RPMs from files/dnf/hyprland-rpms.
+base-image: quay.io/fedora-ostree-desktops/base-atomic
+image-version: 45
 
 modules:
   # NOTE: module order matters for layer caching. Slow-but-stable layers (dnf) go
   # first; frequently-edited layers (files/scripts) go last so dotfile tweaks
   # don't invalidate the package layer.
 
-  # 1. Rebrand os-release (wayblue sets NAME="wayblue", which leaks into GRUB entries)
+  # 1. Rebrand os-release (the Fedora base says "Fedora Linux"; make the image
+  # self-identifying in GRUB, fastfetch and DMS)
   - type: os-release
     properties:
       NAME: "HyprTomic"
@@ -33,11 +38,16 @@ modules:
   #   duxlabs/dms       dms, dms-cli
   #   duxlabs/dux-repo  quickshell, matugen, dux-* (gop/search/calendar/files),
   #                     dux-icons, material-symbols-fonts, ghostty
+  #   ublue-os/packages just, ublue-os-just (the ujust frontend + stock recipes),
+  #                     ublue-os-luks / update-services / udev-rules
   #   ririko66z/...     bibata-cursor-theme, jetbrains-mono-nf-fonts
   #
-  # Mozkey IbG (the fcitx5 IME) is not in Fedora or a COPR. Upstream publishes
-  # an x86_64 Fedora RPM with the Fcitx5 frontend and the bundled Zenz runtime,
-  # so install-mozkey.sh fetches a pinned release and verifies its SHA256.
+  # The compositor stack (hyprland-git and its libraries) is self-built: Fedora
+  # 45's hyprutils/hyprgraphics are too old and aquamarine/hyprwire/hyprtoolkit/
+  # the portal and the polkit agent are absent. packages/hyprland/lock.yml pins
+  # the sources; hyprland-local.repo serves the cached RPMs to this module.
+  #
+  # install-sweet-ime.sh installs the pinned fcitx5 addon and settings GUI.
   #
   # quickshell comes from dux-repo, not Fedora, because DMS tracks quickshell
   # upstream faster than the distro package. `quickshell` is requested by its
@@ -52,9 +62,11 @@ modules:
       copr:
         - duxlabs/dms
         - duxlabs/dux-repo
+        - ublue-os/packages
       files:
         - ririko66z-dots-hyprland.repo # bibata-cursor-theme, jetbrains-mono-nf-fonts
         - terra.repo # mission-center (scoped with includepkgs)
+        - hyprland-local.repo # self-built compositor stack (packages/hyprland)
     install:
       skip-unavailable: true
       packages:
@@ -70,6 +82,44 @@ modules:
         - dux-files
         - dux-icons
         - material-symbols-fonts
+
+        # --- Hyprland compositor stack (self-built; packages/hyprland)
+        # hyprland-git Provides/Conflicts hyprland and ships
+        # /usr/share/wayland-sessions/hyprland.desktop plus hyprland-session.target.
+        - hyprland-git
+        - hyprlock
+        - hypridle
+        - hyprland-qt-support # Qt Quick controls for hyprland plugins
+        - hyprpolkitagent
+        - xdg-desktop-portal-hyprland
+        # Hyprland Requires xorg-x11-server-Xwayland (present in base-atomic,
+        # listed explicitly so a base change cannot silently drop it).
+        - xorg-x11-server-Xwayland
+        - polkit
+
+        # --- SDDM (base-atomic has no display manager). Fedora's sddm ships
+        # its own sysusers.d entry, so wayblue's sddm-boot.service workaround is
+        # not needed. sddm-wayland-generic satisfies the
+        # sddm-greeter-displayserver virtual dependency with a Weston greeter,
+        # so the image does not need an Xorg server for the login screen.
+        # install-sddm-theme.sh installs the greeter theme; the systemd module
+        # enables sddm.service.
+        - sddm
+        - sddm-wayland-generic
+        - sddm-themes # Qt6 theme (QtVersion=6); no Qt5 QML modules needed
+        # PAM helpers referenced by files/system/etc/pam.d/sddm. pam_oo7 is
+        # Fedora's own addition; without the module PAM logs a dlopen error on
+        # every login.
+        - kwallet
+        - pam-kwallet
+        - pam_oo7
+
+        # --- ujust (ublue-os-just's stock justfile imports our 60-custom.just)
+        - just
+        - ublue-os-just
+        - ublue-os-luks
+        - ublue-os-update-services
+        - ublue-os-udev-rules
 
         # --- DMS runtime dependencies and recommendations
         # (dms.spec: Requires accountsservice / qt6-qtmultimedia,
@@ -108,7 +158,7 @@ modules:
         - bluez
         - bluez-obexd
 
-        # --- Auth base (polkit + hyprpolkitagent provided by wayblue base)
+        # --- Auth base (polkit and hyprpolkitagent are installed above/base)
         - gnome-keyring
         - gnome-keyring-pam
         # Fingerprint support for the SDDM/hyprlock PAM gate. libfprint is
@@ -133,15 +183,14 @@ modules:
         - google-noto-sans-cjk-fonts
         - google-noto-color-emoji-fonts
         - jetbrains-mono-nf-fonts
-        - google-roboto-flex-fonts # DMS default UI face
+        - google-roboto-fonts # DMS UI face (Roboto Flex is not packaged in F45)
 
         # --- Icons / cursor (loaded by the compositor, so they must be on the host)
         - papirus-icon-theme
         - adw-gtk3-theme
         - bibata-cursor-theme
 
-        # --- IME: fcitx5 + Mozkey IbG (upstream Fedora RPM, installed by
-        #     install-mozkey.sh). The RPM bundles its own Zenz runtime.
+        # --- IME: Sweet IME uses the native fcitx5 stack.
         - fcitx5
         - fcitx5-gtk
         - fcitx5-qt
@@ -165,7 +214,7 @@ modules:
         - gvfs-smb
         - afuse
         - fuse
-        - sshfs # SSH-backed FUSE mounts for remote filesystems
+        - fuse-sshfs # SSH-backed FUSE mounts for remote filesystems
         - udisks2
         - bubblewrap
         - ffmpegthumbnailer
@@ -219,10 +268,11 @@ modules:
   # 4. Build-time scripts (live in files/scripts/; reference by bare filename)
   - type: script
     scripts:
-      - install-mozkey.sh
+      - install-sweet-ime.sh
       - install-sunshine.sh
       - install-sddm-theme.sh
       - finalize.sh
+      - verify-install.sh
 
   # 5. Enable firstboot/session services (user groups, zsh default; ydotool
   #    as a user unit, mirroring upstream).
@@ -234,6 +284,7 @@ modules:
   - type: systemd
     system:
       enabled:
+        - sddm.service # base-atomic ships no display manager
         - hyprtomic-groups.service
         - hyprtomic-zsh-default.service
     user:
@@ -249,7 +300,8 @@ modules:
       - notify: true
         scope: system
         install:
-          - org.mozilla.firefox
+          - com.google.Chrome
+          - io.github.flattool.Warehouse
           - org.gnome.Loupe
           - com.bitwarden.desktop
 

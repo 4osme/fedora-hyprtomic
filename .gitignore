@@ -11,3 +11,11 @@ __pycache__/
 # Design decisions under docs/design/ are tracked.
 docs/*
 !docs/design/
+
+# Self-built Hyprland RPMs. packages/hyprland/build.sh produces out/; the
+# GitHub workflow copies it to files/dnf/hyprland-rpms/ before BlueBuild runs.
+/packages/hyprland/out/
+/files/dnf/hyprland-rpms/
+# Artifacts from `bluebuild generate` / local podman builds.
+/.bluebuild-scripts_*
+/Containerfile.generated

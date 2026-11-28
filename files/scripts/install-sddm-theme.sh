@@ -38,4 +38,4 @@ install -Dm644 /usr/share/hyprtomic/sddm/Components/LoginForm.qml \
 install -Dm644 /usr/share/hyprtomic/sddm/wallpaper.jpg \
     "$theme/Backgrounds/wallpaper.jpg"
 
-systemctl enable sddm
+# sddm.service itself is enabled declaratively by the recipe's systemd module.

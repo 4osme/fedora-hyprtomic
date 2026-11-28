@@ -4,7 +4,7 @@ Name=Default
 # Layout (JIS)
 Default Layout=jp
 # Default Input Method
-DefaultIM=mozkey-ibg
+DefaultIM=sweetime
 
 [Groups/0/Items/0]
 # Name
@@ -14,7 +14,7 @@ Layout=
 
 [Groups/0/Items/1]
 # Name
-Name=mozkey-ibg
+Name=sweetime
 # Layout
 Layout=
 

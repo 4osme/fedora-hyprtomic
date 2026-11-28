@@ -11,6 +11,7 @@ on:
       - "files/system/**"
       - "files/scripts/**"
       - "files/dnf/**"
+      - "packages/**"
       - "!**/*.md"
       - ".github/workflows/build.yml"
   pull_request:
@@ -19,6 +20,7 @@ on:
       - "files/system/**"
       - "files/scripts/**"
       - "files/dnf/**"
+      - "packages/**"
       - "!**/*.md"
       - ".github/workflows/build.yml"
   workflow_dispatch: # allow manually triggering builds
@@ -27,13 +29,103 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
   cancel-in-progress: true
 jobs:
+  # Fedora 45 does not ship a usable Hyprland stack, so we build the pinned set
+  # from packages/hyprland/lock.yml. The cache key is the lock/spec/build-script
+  # content: an unchanged set is restored instead of rebuilt, and the RPMs are
+  # passed to the image job as an artifact.
+  hyprland-rpms:
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:45
+      options: --user root
+    # Container jobs default to `sh`; the validation steps use bash syntax.
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # actions/checkout and the cache actions need git/tar/zstd in the image.
+      - name: Install checkout/cache prerequisites
+        run: dnf install -y --setopt=install_weak_deps=False git tar gzip xz zstd
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compute RPM build id
+        id: build-id
+        run: echo "value=$(sha256sum packages/hyprland/lock.yml | cut -c1-12)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore cached Hyprland RPMs
+        id: cache
+        uses: actions/cache/restore@v4
+        with:
+          path: packages/hyprland/out
+          key: hyprland-rpms-${{ hashFiles('packages/hyprland/lock.yml', 'packages/hyprland/build.sh', 'packages/hyprland/specs/**') }}
+
+      - name: Validate restored cache
+        id: cache-check
+        run: |
+          set -euo pipefail
+          if [[ -f packages/hyprland/out/.complete ]] \
+             && grep -qx "build_id=${{ steps.build-id.outputs.value }}" packages/hyprland/out/.complete \
+             && compgen -G 'packages/hyprland/out/*.rpm' >/dev/null; then
+            echo "hit=true" >> "$GITHUB_OUTPUT"
+            echo "restored $(find packages/hyprland/out -name '*.rpm' | wc -l) RPMs from cache"
+          else
+            rm -rf packages/hyprland/out
+            echo "hit=false" >> "$GITHUB_OUTPUT"
+            echo "no matching cache entry; the RPMs will be rebuilt"
+          fi
+
+      - name: Build Hyprland RPMs
+        if: steps.cache-check.outputs.hit != 'true'
+        run: bash packages/hyprland/build.sh
+
+      - name: Save Hyprland RPMs to cache
+        if: steps.cache-check.outputs.hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: packages/hyprland/out
+          # A corrupt/partial restore under the exact key cannot be overwritten
+          # (caches are immutable), so fall back to a run-scoped key.
+          key: hyprland-rpms-${{ hashFiles('packages/hyprland/lock.yml', 'packages/hyprland/build.sh', 'packages/hyprland/specs/**') }}${{ steps.cache.outputs.cache-hit == 'true' && format('-rebuild-{0}', github.run_id) || '' }}
+
+      - name: Upload RPM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: hyprland-rpms
+          path: packages/hyprland/out
+          if-no-files-found: error
+          retention-days: 7
+          include-hidden-files: true # out/.complete
+
   bluebuild:
+    needs: hyprland-rpms
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
       id-token: write
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # The recipe installs these through files/dnf/hyprland-local.repo.
+      # files/ is bind-mounted at /tmp/files during the image build, so the
+      # RPMs do not become an image layer.
+      - name: Fetch self-built Hyprland RPMs
+        uses: actions/download-artifact@v4
+        with:
+          name: hyprland-rpms
+          path: files/dnf/hyprland-rpms
+
+      - name: Verify Hyprland repo is complete
+        run: |
+          set -euo pipefail
+          test -f files/dnf/hyprland-rpms/.complete
+          compgen -G 'files/dnf/hyprland-rpms/*.rpm' >/dev/null
+          test -f files/dnf/hyprland-rpms/repodata/repomd.xml
+          echo "local Hyprland repo: $(find files/dnf/hyprland-rpms -name '*.rpm' | wc -l) RPMs"
+
       # The build is fully handled by the reusable github action.
       # On pull_request it builds a PR-scoped image (does not touch :latest).
       # On push to main / schedule it publishes + signs :latest.
@@ -42,6 +134,10 @@ jobs:
         uses: blue-build/github-action@v1.11
         with:
           recipe: recipe.yml
+          # We already checked out above and downloaded the RPM artifact into
+          # the workspace. The action's own checkout would `git clean -ffdx`
+          # the untracked files/dnf/hyprland-rpms/ away.
+          skip_checkout: true
           cosign_private_key: ${{ secrets.SIGNING_SECRET }}
           registry_token: ${{ github.token }}
           pr_event_number: ${{ github.event.number }}
@@ -62,4 +158,3 @@ jobs:
             --dest-creds "${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" \
             "docker://$IMAGE:latest" \
             "docker://$IMAGE:$DATE"
-
